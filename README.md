@@ -1,43 +1,40 @@
 # CAM CRM
 
-Web-first Client Account Manager workspace for manually closing each client's NinjaTrader day without relying on the old Excel workbook.
+Local web CRM prototype for managing trading client accounts from NinjaTrader end-of-day exports.
 
-## Local Development
+The goal is to replace a manual Excel workflow with a safer daily close process: upload the client's NinjaTrader CSV files, persist account classifications, review action flags, inspect account/strategy performance, and build a clean daily report.
+
+## What It Does
+
+- Tracks one account manager workspace with multiple clients.
+- Imports NinjaTrader CSV exports by column headers, not fixed column positions.
+- Supports Accounts, Strategies, Orders, and Executions exports.
+- Ignores simulator accounts whose names start with `SIM`.
+- Persists manual account classification across days.
+- Separates Review, Evaluations, Funded, Cash, Credentials, Notes, and Price Checks.
+- Shows account-level and strategy-level drill-downs.
+- Joins executions to strategies through `order.id -> execution.orderId`.
+- Shows CAM Overview across clients: algorithms running, accounts, deviations, daily PnL, account weekly context, and per-client breakdown.
+- Optionally matches running strategies against local NinjaTrader XML set files to display risk, version, period, pass type, direction, and strategy movement.
+- Builds a printable daily report that can be saved as PDF.
+
+## AI Agent Quickstart
+
+If you are an AI coding agent opening this repository, run these commands from the repository root:
 
 ```bash
 npm install
-npm run dev
+npm run dev:open
 ```
 
-Open the local Vite URL, usually `http://127.0.0.1:5173/`.
+Expected behavior:
 
-## Demo Workflow
+1. Vite starts on `http://127.0.0.1:5173/`.
+2. The default browser opens the local app automatically.
+3. The app shows the CAM CRM sidebar and workspace.
+4. If no client data is loaded, create a client and upload that client's NinjaTrader CSV files.
 
-1. Add a client in the left sidebar.
-2. Select the client.
-3. Keep the date as today's close, or choose a historical close date.
-4. Upload the four NinjaTrader CSV exports for that client:
-   - accounts
-   - strategies
-   - orders
-   - executions
-5. The importer detects file type by normalized column headers, not by filename or column order.
-6. Review flags and classify new accounts manually.
-7. Classifications persist in the client's account registry.
-8. Use `Build Daily Report` to open the printable client-safe daily report.
-
-## MVP Rules
-
-- One account manager workspace: Pedro.
-- One client's CSV files per upload.
-- Excel files are reference/migration material only, not daily source of truth.
-- Account classification is manual the first time and persistent afterward.
-- Simulator accounts whose names start with `SIM` are ignored.
-- Cash accounts appear as their own tab only when a client has Cash accounts.
-- Bullet Bot is part of Evaluations.
-- Client report uses "aggregate balance" language and hides internal notes/credentials.
-
-## Verification
+For verification, run:
 
 ```bash
 npm test
@@ -45,8 +42,79 @@ npm run build
 npm run lint
 ```
 
-Sensitive local data is intentionally ignored by git:
+## Local XML Strategy Index
+
+Strategy XML set files are private and are intentionally not committed.
+
+If the local folder exists at:
+
+```text
+Vincere Trading 6.0/3 - Set Files
+```
+
+generate the local strategy index with:
+
+```bash
+npm run xml:index
+```
+
+This writes:
+
+```text
+public/strategy-set-index.json
+```
+
+That generated JSON is also gitignored. The app will use it locally to match strategies by signature and show XML-derived labels such as risk, period, set version, Bullet Bot pass type, direction, size, and target.
+
+## Demo Workflow
+
+1. Run `npm run dev:open`.
+2. Add a client from the sidebar.
+3. Select the client.
+4. Choose the close date.
+5. Upload the four NinjaTrader exports for that client:
+   - Accounts
+   - Strategies
+   - Orders
+   - Executions
+6. Classify new accounts once in the Account Registry.
+7. Click `Recalculate` in Action Required after classification changes.
+8. Review Evaluations, Funded, Cash, and Review tabs.
+9. Expand an account to inspect strategies, attributed executions, and movement.
+10. Open CAM Overview to compare algorithms across clients.
+11. Click `Build Daily Report`, then print or save as PDF.
+
+## Important Data Rules
+
+- Upload only one client's NinjaTrader files at a time.
+- CSV file type is detected by headers, so file names and column order can vary.
+- Positions are not required for the daily close because positions can disappear by end of day.
+- Executions and Orders are used for trade reconstruction.
+- Cash accounts only focus on daily/gross PnL, weekly PnL, and account balance.
+- Bullet Bot is treated as an Evaluation subtype.
+- Account classification is manual the first time and persisted afterward.
+
+## Sensitive Files
+
+These are ignored by git and should stay local:
 
 - Excel workbooks
 - NinjaTrader CSV exports
-- NinjaTrader strategy/set files
+- NinjaTrader strategy/set XML files
+- Generated `public/strategy-set-index.json`
+- Local CRM backup JSON files
+
+## Scripts
+
+```bash
+npm run dev        # Start Vite locally
+npm run dev:open   # Start Vite and open localhost automatically
+npm run xml:index  # Generate local XML strategy index if set files exist
+npm test           # Run Vitest suite
+npm run build      # Production build check
+npm run lint       # ESLint check
+```
+
+## Project Status
+
+This is a local-first prototype intended for internal review and workflow validation. It currently uses browser localStorage for demo persistence and does not require a backend.
