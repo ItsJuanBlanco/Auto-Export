@@ -32,3 +32,6 @@ Vincere Trading 6.0/
 *.njsproj
 *.sln
 *.sw?
+
+# Local CRM backups
+cam-backup-*.json
