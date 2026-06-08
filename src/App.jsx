@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle,
   BarChart3,
   CalendarDays,
   CheckCircle2,

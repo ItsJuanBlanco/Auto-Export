@@ -1,26 +1,51 @@
-# CAM Portal (Client Account Manager)
+# CAM CRM
 
-## Purpose
-The CAM Portal is a centralized dashboard designed to process and visualize daily trading performance data from NinjaTrader grid exports (`acc.csv`, `str.csv`, `ord.csv`). It allows Account Managers to track specific algorithms running across multiple Prop Firm accounts, categorized logically into Evaluations and Funded stages.
+Web-first Client Account Manager workspace for manually closing each client's NinjaTrader day without relying on the old Excel workbook.
 
-## Core Logic & Terminology
-- **Client**: A trader or entity managed by the CAM. Each client has a segregated historical record of uploads.
-- **Prop Firm (Connection)**: The underlying firm providing the account (e.g., Legends Trading, BlueSky, My Funded Futures, Lucid).
-- **Buckets**: Accounts are classified into two primary buckets:
-  - `Evaluation`: Accounts in the testing phase to reach a specific profit target.
-  - `Funded`: Live accounts that have passed evaluation.
-- **Account Status**: Manually set to `Active`, `Inactive`, or `Parked`.
-- **Gross Realized PnL**: The primary metric serving as the true "Net Profit" indicator.
-- **Algorithm (Strategy)**: Automated trading bots (e.g., B2X-2.5, Bullet Bot-1.1) deployed on accounts.
-- **Distance to Target**: The required monetary gap between the `Gross Realized PnL` and the user-defined `Profit Target`.
+## Local Development
 
-## Native Shape of the Product
-The product is structured as a **Hierarchical Tree Dashboard**. 
-Data flows downwards: `Client -> Upload (Timestamp) -> Account -> Algorithms`.
-The dashboard reflects this native shape by establishing the **Account** as the dominant entity, displaying its base stats, and nesting the **Algorithms** trading on it directly beneath it.
+```bash
+npm install
+npm run dev
+```
 
-## Critical Files
-- `src/utils/csvParser.js`: The parsing pipeline utilizing `papaparse` to map NinjaTrader headers (`Display name`, `Trailing max drawdown`, `Gross realized PnL`) to local state.
-- `src/App.jsx`: State manager and Sidebar navigation. Manages Client CRUD and Historical Upload persistence via `localStorage`.
-- `src/components/Dashboard.jsx`: The Recharts visualization layer and the Account Tree view.
-- `src/index.css`: The root design system and token definitions.
+Open the local Vite URL, usually `http://127.0.0.1:5173/`.
+
+## Demo Workflow
+
+1. Add a client in the left sidebar.
+2. Select the client.
+3. Keep the date as today's close, or choose a historical close date.
+4. Upload the four NinjaTrader CSV exports for that client:
+   - accounts
+   - strategies
+   - orders
+   - positions/executions
+5. The importer detects file type by normalized column headers, not by filename or column order.
+6. Review flags and classify new accounts manually.
+7. Classifications persist in the client's account registry.
+8. Use `Build Daily Report` to open the printable client-safe daily report.
+
+## MVP Rules
+
+- One account manager workspace: Pedro.
+- One client's CSV files per upload.
+- Excel files are reference/migration material only, not daily source of truth.
+- Account classification is manual the first time and persistent afterward.
+- Cash accounts appear as their own tab only when a client has Cash accounts.
+- Bullet Bot is part of Evaluations.
+- Client report uses "aggregate balance" language and hides internal notes/credentials.
+
+## Verification
+
+```bash
+npm test
+npm run build
+npm run lint
+```
+
+Sensitive local data is intentionally ignored by git:
+
+- Excel workbooks
+- NinjaTrader CSV exports
+- NinjaTrader strategy/set files
