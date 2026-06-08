@@ -14,7 +14,8 @@ const PAYOUT_OPTIONS = Object.values(PAYOUT_STATES);
 const PASS_TYPES = ['', '1-day pass', '2-day pass', '3-day pass'];
 const DIRECTIONS = ['', 'Long', 'Short'];
 
-export default function AccountManager({ accounts, snapshots, onUpdateAccount }) {
+export default function AccountManager({ accounts, snapshots, onUpdateAccount, mode }) {
+  const isCash = mode === 'cash';
   const rows = Object.values(accounts || {}).map((account) => ({
     ...account,
     snapshot: (snapshots || []).find((item) => item.accountName === account.accountName),
@@ -32,10 +33,10 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount })
             <th>Account</th>
             <th>Type</th>
             <th>Status</th>
-            <th>Pass</th>
-            <th>Direction</th>
-            <th>Payout</th>
-            <th>Target</th>
+            {!isCash ? <th>Pass</th> : null}
+            {!isCash ? <th>Direction</th> : null}
+            {!isCash ? <th>Payout</th> : null}
+            {!isCash ? <th>Target</th> : null}
             <th>Notes</th>
           </tr>
         </thead>
@@ -62,48 +63,56 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount })
                   {STATUS_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                 </select>
               </td>
-              <td>
-                {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
-                  <select
-                    value={account.bulletBotPassType || ''}
-                    disabled={account.accountType !== ACCOUNT_TYPES.EVALUATION_BULLET}
-                    onChange={(event) => onUpdateAccount(account.accountName, { bulletBotPassType: event.target.value })}
-                  >
-                    {PASS_TYPES.map((option) => <option key={option} value={option}>{option || 'N/A'}</option>)}
-                  </select>
-                )}
-              </td>
-              <td>
-                {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
-                  <select
-                    value={account.bulletBotDirection || ''}
-                    disabled={account.accountType !== ACCOUNT_TYPES.EVALUATION_BULLET}
-                    onChange={(event) => onUpdateAccount(account.accountName, { bulletBotDirection: event.target.value })}
-                  >
-                    {DIRECTIONS.map((option) => <option key={option} value={option}>{option || 'N/A'}</option>)}
-                  </select>
-                )}
-              </td>
-              <td>
-                {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
-                  <select
-                    value={account.payoutState || PAYOUT_STATES.NOT_REQUESTED}
-                    onChange={(event) => onUpdateAccount(account.accountName, { payoutState: event.target.value })}
-                  >
-                    {PAYOUT_OPTIONS.map((option) => <option key={option}>{option}</option>)}
-                  </select>
-                )}
-              </td>
-              <td>
-                {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
-                  <input
-                    type="number"
-                    value={account.targetProfit ?? ''}
-                    placeholder="Target"
-                    onChange={(event) => onUpdateAccount(account.accountName, { targetProfit: event.target.value })}
-                  />
-                )}
-              </td>
+              {!isCash ? (
+                <td>
+                  {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
+                    <select
+                      value={account.bulletBotPassType || ''}
+                      disabled={account.accountType !== ACCOUNT_TYPES.EVALUATION_BULLET}
+                      onChange={(event) => onUpdateAccount(account.accountName, { bulletBotPassType: event.target.value })}
+                    >
+                      {PASS_TYPES.map((option) => <option key={option} value={option}>{option || 'N/A'}</option>)}
+                    </select>
+                  )}
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
+                    <select
+                      value={account.bulletBotDirection || ''}
+                      disabled={account.accountType !== ACCOUNT_TYPES.EVALUATION_BULLET}
+                      onChange={(event) => onUpdateAccount(account.accountName, { bulletBotDirection: event.target.value })}
+                    >
+                      {DIRECTIONS.map((option) => <option key={option} value={option}>{option || 'N/A'}</option>)}
+                    </select>
+                  )}
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
+                    <select
+                      value={account.payoutState || PAYOUT_STATES.NOT_REQUESTED}
+                      onChange={(event) => onUpdateAccount(account.accountName, { payoutState: event.target.value })}
+                    >
+                      {PAYOUT_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+                    </select>
+                  )}
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
+                    <input
+                      type="number"
+                      value={account.targetProfit ?? ''}
+                      placeholder="Target"
+                      onChange={(event) => onUpdateAccount(account.accountName, { targetProfit: event.target.value })}
+                    />
+                  )}
+                </td>
+              ) : null}
               <td>
                 <input
                   value={account.notes || ''}

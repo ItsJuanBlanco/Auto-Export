@@ -3,6 +3,7 @@ import {
   BarChart3,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   FileText,
   Lock,
   Plus,
@@ -107,10 +108,16 @@ function ReportPanel({ client, dailyImport, onClose }) {
         {['evaluations', 'funded', 'cash'].map((group) => report.grouped[group].length ? (
           <section className="report-section" key={group}>
             <h2>{group === 'cash' ? 'Cash Accounts' : group}</h2>
+            <div className="report-row report-row-head">
+              <strong>Account</strong>
+              <span>Status</span>
+              <span>Daily PnL</span>
+              <span>{group === 'cash' ? 'Cash balance' : 'Aggregate balance'}</span>
+            </div>
             {report.grouped[group].map((row) => (
               <div className="report-row" key={row.accountName}>
-                <strong>{row.meta.alias || row.accountName}</strong>
-                <span>{row.meta.status || 'Active'}</span>
+                <strong>{row.meta?.alias || row.accountName}</strong>
+                <span>{row.meta?.status || 'Active'}</span>
                 <span>{formatCurrency(row.grossRealizedPnl)}</span>
                 <span>{formatCurrency(row.accountBalance)}</span>
               </div>
@@ -194,6 +201,7 @@ export default function App() {
   const [showUpload, setShowUpload] = useState(false);
   const [showTeam, setShowTeam] = useState(false);
   const [reportImport, setReportImport] = useState(null);
+  const [registryOpen, setRegistryOpen] = useState(false);
 
   useEffect(() => saveDemoState(state), [state]);
 
@@ -333,11 +341,19 @@ export default function App() {
                     onRecalculate={recalculateImport}
                   />
                   <section className="panel">
-                    <div className="panel-heading">
+                    <button className="registry-toggle" onClick={() => setRegistryOpen((value) => !value)}>
+                      <ChevronDown className={registryOpen ? 'chevron open' : 'chevron'} size={16} />
                       <h3>Account Registry</h3>
                       <span className="muted">Manual classification persists across days.</span>
-                    </div>
-                    <AccountManager {...currentTabData} onUpdateAccount={handleAccountUpdate} />
+                      <span className="count">{Object.keys(currentTabData.accounts).length}</span>
+                    </button>
+                    {registryOpen ? (
+                      <AccountManager
+                        {...currentTabData}
+                        mode={tabMode(effectiveActiveTab)}
+                        onUpdateAccount={handleAccountUpdate}
+                      />
+                    ) : null}
                   </section>
                 </>
               ) : null}

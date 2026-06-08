@@ -31,11 +31,11 @@ function MiniTimeline({ executions }) {
   );
 }
 
-function AccountDetail({ row, executions }) {
+function AccountDetail({ row, executions, colSpan = 7 }) {
   const accountExecutions = executions.filter((execution) => execution.accountName === row.accountName);
   return (
     <tr className="account-detail-row">
-      <td colSpan="7">
+      <td colSpan={colSpan}>
         <div className="account-detail">
           <div>
             <h4>Strategies</h4>
@@ -78,7 +78,7 @@ function AccountTable({ title, rows, executions, mode }) {
             <tr>
               <th>Account</th>
               {!isCash ? <th>Status</th> : null}
-              {!isCash ? <th>Strategies</th> : null}
+              <th>Strategies</th>
               <th>Daily PnL</th>
               <th>Weekly PnL</th>
               <th>Aggregate balance</th>
@@ -98,21 +98,19 @@ function AccountTable({ title, rows, executions, mode }) {
                     <small>{row.meta?.connection || row.connection || 'No connection'}</small>
                   </td>
                   {!isCash ? <td>{row.meta?.status || 'Active'}</td> : null}
-                  {!isCash ? (
-                    <td>
-                      {row.strategies?.length ? row.strategies.map((strategy) => (
-                        <span className={strategy.enabled ? 'strategy enabled' : 'strategy'} key={`${row.accountName}-${strategy.strategyName}`}>
-                          {strategy.strategyFamily || strategy.strategyName}{strategy.direction ? ` · ${strategy.direction}` : ''}
-                        </span>
-                      )) : <span className="muted">None</span>}
-                    </td>
-                  ) : null}
+                  <td>
+                    {row.strategies?.length ? row.strategies.map((strategy) => (
+                      <span className={strategy.enabled ? 'strategy enabled' : 'strategy'} key={`${row.accountName}-${strategy.strategyName}`}>
+                        {strategy.strategyFamily || strategy.strategyName}{strategy.direction ? ` · ${strategy.direction}` : ''}
+                      </span>
+                    )) : <span className="muted">None</span>}
+                  </td>
                   <td className={row.grossRealizedPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.grossRealizedPnl)}</td>
                   <td className={row.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.weeklyPnl)}</td>
                   <td>{formatCurrency(row.accountBalance)}</td>
                   {!isCash ? <td>{formatCurrency(row.trailingMaxDrawdown)}</td> : null}
                 </tr>
-                {expandedAccount === row.accountName ? <AccountDetail row={row} executions={executions} /> : null}
+                {expandedAccount === row.accountName ? <AccountDetail row={row} executions={executions} colSpan={isCash ? 5 : 7} /> : null}
               </Fragment>
             ))}
           </tbody>
@@ -145,7 +143,7 @@ export default function Dashboard({ dailyImport, rows = [], title, mode, onBuild
         <Metric label={`${title} accounts`} value={summary.counts.accounts} />
         <Metric label="Daily/Gross PnL" value={formatCurrency(summary.totals.grossRealizedPnl)} tone={summary.totals.grossRealizedPnl >= 0 ? 'positive' : 'negative'} />
         <Metric label="Weekly PnL" value={formatCurrency(summary.totals.weeklyPnl)} tone={summary.totals.weeklyPnl >= 0 ? 'positive' : 'negative'} />
-        <Metric label={isCash ? 'Cash account balance' : 'Aggregate balance'} value={formatCurrency(summary.totals.aggregateBalance)} />
+        {isCash ? <Metric label="Cash account balance" value={formatCurrency(summary.totals.aggregateBalance)} /> : null}
       </div>
 
       <section className={criticalFlags.length ? 'panel danger-panel' : 'panel'}>

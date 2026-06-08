@@ -347,6 +347,36 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   margin: 0;
 }
 
+.registry-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.registry-toggle h3 {
+  margin: 0;
+}
+
+.registry-toggle .count {
+  margin-left: auto;
+}
+
+.report-row-head {
+  border-bottom: 2px solid #cbd5e1;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
 .count, .badge {
   border-radius: 999px;
   padding: 3px 8px;
