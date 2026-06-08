@@ -13,7 +13,7 @@
 ## File Structure
 
 - Create `src/domain/csvImport.js`: normalize headers, detect NinjaTrader file type, parse accounts/strategies/orders/executions by header names.
-- Create `src/domain/reconcile.js`: convert parsed files into daily snapshots, preserve classifications, generate operational flags.
+- Create `src/domain/reconcile.js`: convert parsed files into daily snapshots, preserve classifications, ignore simulator accounts, generate operational flags.
 - Create `src/domain/demoStore.js`: localStorage-backed client/import/account registry helpers.
 - Create `src/domain/report.js`: build report-ready summaries from closed or reviewed snapshots.
 - Create `src/domain/csvImport.test.js`: tests for header order independence and file type detection.
@@ -147,13 +147,13 @@ it('detects orders files by headers regardless of file name', () => {
   });
 });
 
-it('detects executions or positions files by entry exit headers', () => {
+it('detects executions files by entry exit headers', () => {
   const csv = [
     'Account display name,E/X,Instrument,Action,Quantity,Price,Time,Order ID,Name,Connection',
     'ACC1,Entry,NQ JUN26,Buy,2,19000,6/2/2026 9:30:00 AM,99,Enter Long,Lucid'
   ].join('\n');
 
-  const parsed = parseNinjaTraderCsvText(csv, 'positions.csv');
+  const parsed = parseNinjaTraderCsvText(csv, 'executions.csv');
 
   expect(parsed.type).toBe('executions');
   expect(parsed.rows[0]).toMatchObject({

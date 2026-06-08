@@ -17,7 +17,7 @@ Daily operational inputs:
 - NinjaTrader accounts CSV
 - NinjaTrader strategies CSV
 - NinjaTrader orders CSV
-- NinjaTrader positions/executions CSV
+- NinjaTrader executions CSV
 
 Reference inputs:
 
@@ -28,6 +28,8 @@ Reference inputs:
 The CSV import belongs to exactly one client. The files are downloaded manually from that client's VPS at the end of the trading day.
 
 CSV column order is not stable across clients, days, or NinjaTrader versions. The importer must never depend on fixed column positions such as "column B". It must identify file type and field meaning by normalized column headers.
+
+Simulator accounts whose account names start with `SIM` are ignored.
 
 ## MVP Scope
 
@@ -179,7 +181,7 @@ Fields:
 
 ### OrderExecution
 
-Audit detail from orders and positions/executions files.
+Audit detail from orders and executions files.
 
 Fields:
 

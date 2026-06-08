@@ -69,4 +69,26 @@ describe('reconcileDailyImport', () => {
       accountName: 'ACC1',
     }));
   });
+
+  it('ignores simulator accounts that start with SIM', () => {
+    const parsed = {
+      accounts: [
+        { accountName: 'Sim101', connection: 'Simulated Data Feed', grossRealizedPnl: 999, accountBalance: 100000, weeklyPnl: 999 },
+        { accountName: 'SIM-Amanda-Test', connection: 'Simulated', grossRealizedPnl: 999, accountBalance: 100000, weeklyPnl: 999 },
+        { accountName: 'LIVE1234', connection: 'Live', grossRealizedPnl: 10, accountBalance: 50100, weeklyPnl: 20 },
+      ],
+      strategies: [
+        { accountName: 'Sim101', strategyName: '0 - RBO-1.8', strategyFamily: 'RBO', enabled: true },
+        { accountName: 'LIVE1234', strategyName: '0 - RBO-1.8', strategyFamily: 'RBO', enabled: true },
+      ],
+      orders: [],
+      executions: [],
+    };
+
+    const result = reconcileDailyImport({ clientId: 'client-1', date: '2026-06-08', registry: {}, parsed });
+
+    expect(Object.keys(result.accounts)).toEqual(['LIVE1234']);
+    expect(result.snapshots.map((snapshot) => snapshot.accountName)).toEqual(['LIVE1234']);
+    expect(result.strategies.map((strategy) => strategy.accountName)).toEqual(['LIVE1234']);
+  });
 });

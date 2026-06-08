@@ -52,7 +52,7 @@ export default function UploadArea({ onParsed }) {
       <label className="upload-dropzone">
         <UploadCloud size={22} />
         <span>{isProcessing ? 'Processing files...' : 'Upload NinjaTrader daily files'}</span>
-        <small>Accounts, strategies, orders, and positions/executions. Headers can be in any order.</small>
+        <small>Accounts, strategies, orders, and executions. Headers can be in any order.</small>
         <input
           type="file"
           multiple

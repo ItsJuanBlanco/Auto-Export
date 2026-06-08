@@ -20,7 +20,7 @@ Open the local Vite URL, usually `http://127.0.0.1:5173/`.
    - accounts
    - strategies
    - orders
-   - positions/executions
+   - executions
 5. The importer detects file type by normalized column headers, not by filename or column order.
 6. Review flags and classify new accounts manually.
 7. Classifications persist in the client's account registry.
@@ -32,6 +32,7 @@ Open the local Vite URL, usually `http://127.0.0.1:5173/`.
 - One client's CSV files per upload.
 - Excel files are reference/migration material only, not daily source of truth.
 - Account classification is manual the first time and persistent afterward.
+- Simulator accounts whose names start with `SIM` are ignored.
 - Cash accounts appear as their own tab only when a client has Cash accounts.
 - Bullet Bot is part of Evaluations.
 - Client report uses "aggregate balance" language and hides internal notes/credentials.

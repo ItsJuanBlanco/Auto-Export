@@ -73,13 +73,13 @@ describe('csvImport', () => {
     });
   });
 
-  it('detects executions or positions files by entry exit headers', () => {
+  it('detects executions files by entry exit headers', () => {
     const csv = [
       'Account display name,E/X,Instrument,Action,Quantity,Price,Time,Order ID,Name,Connection',
       'ACC1,Entry,NQ JUN26,Buy,2,19000,6/2/2026 9:30:00 AM,99,Enter Long,Lucid',
     ].join('\n');
 
-    const parsed = parseNinjaTraderCsvText(csv, 'positions.csv');
+    const parsed = parseNinjaTraderCsvText(csv, 'executions.csv');
 
     expect(parsed.type).toBe('executions');
     expect(parsed.rows[0]).toMatchObject({

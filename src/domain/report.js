@@ -8,7 +8,10 @@ export function formatCurrency(value) {
 
 export function buildDailyReportSummary(client, dailyImport) {
   const snapshots = dailyImport?.snapshots || [];
-  const registry = dailyImport?.accounts || client?.accountRegistry || {};
+  const registry = {
+    ...(dailyImport?.accounts || {}),
+    ...(client?.accountRegistry || {}),
+  };
   const grouped = {
     evaluations: [],
     funded: [],

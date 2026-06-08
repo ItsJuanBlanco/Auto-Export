@@ -80,6 +80,10 @@ function hasActiveStrategy(strategies = []) {
   return strategies.some((strategy) => strategy.enabled);
 }
 
+function isSimulatorAccount(accountName) {
+  return String(accountName || '').trim().toLowerCase().startsWith('sim');
+}
+
 function createSnapshot(account, strategies) {
   return {
     accountName: account.accountName,
@@ -97,8 +101,11 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
   const accountsByName = {};
   const snapshots = [];
   const flags = [];
-  const sourceAccounts = parsed.accounts || [];
-  const strategiesByAccount = groupStrategiesByAccount(parsed.strategies || []);
+  const sourceAccounts = (parsed.accounts || []).filter((account) => !isSimulatorAccount(account.accountName));
+  const strategies = (parsed.strategies || []).filter((strategy) => !isSimulatorAccount(strategy.accountName));
+  const orders = (parsed.orders || []).filter((order) => !isSimulatorAccount(order.accountName));
+  const executions = (parsed.executions || []).filter((execution) => !isSimulatorAccount(execution.accountName));
+  const strategiesByAccount = groupStrategiesByAccount(strategies);
   const seen = new Set();
 
   for (const account of sourceAccounts) {
@@ -188,9 +195,9 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
     status: flags.some((flag) => flag.severity === 'Critical' || flag.severity === 'Warning') ? 'Needs review' : 'Ready to close',
     accounts: accountsByName,
     snapshots,
-    strategies: parsed.strategies || [],
-    orders: parsed.orders || [],
-    executions: parsed.executions || [],
+    strategies,
+    orders,
+    executions,
     flags,
   };
 }

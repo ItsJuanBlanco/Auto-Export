@@ -40,7 +40,10 @@ function deriveClientBadge(client) {
 }
 
 function filteredAccountsForTab(client, dailyImport, tab) {
-  const accounts = dailyImport?.accounts || client?.accountRegistry || {};
+  const accounts = {
+    ...(dailyImport?.accounts || {}),
+    ...(client?.accountRegistry || {}),
+  };
   const snapshots = dailyImport?.snapshots || [];
   const entries = Object.fromEntries(Object.entries(accounts).filter(([, account]) => {
     if (tab === 'Evaluations') return account.accountType?.startsWith('Evaluation') || account.accountType === 'Unassigned';
