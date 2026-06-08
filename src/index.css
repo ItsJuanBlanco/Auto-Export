@@ -63,6 +63,20 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   font-size: 24px;
 }
 
+.backup-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.backup-actions .ghost-button {
+  flex: 1;
+  justify-content: center;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
 .client-form {
   display: grid;
   grid-template-columns: 1fr 38px;

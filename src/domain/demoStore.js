@@ -124,6 +124,22 @@ export function getClientImportByDate(client, date) {
   return client?.dailyImports?.find((item) => item.date === date) || null;
 }
 
+export function exportFileName() {
+  return `cam-backup-${todayIsoDate()}.json`;
+}
+
+export function parseImportedState(text) {
+  const data = JSON.parse(text);
+  if (!data || typeof data !== 'object' || !Array.isArray(data.clients) || !data.accountManager) {
+    throw new Error('File is not a valid CAM backup.');
+  }
+  return {
+    accountManager: data.accountManager,
+    clients: data.clients,
+    selectedClientId: data.selectedClientId || data.clients[0]?.id || null,
+  };
+}
+
 export function loadDemoState() {
   if (typeof window === 'undefined') return createInitialState();
   try {

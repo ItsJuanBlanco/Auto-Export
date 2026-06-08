@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  Download,
   FileText,
   Lock,
   Plus,
@@ -16,8 +17,10 @@ import UploadArea from './components/UploadArea';
 import {
   addClient,
   appendDailyImport,
+  exportFileName,
   getClientImportByDate,
   loadDemoState,
+  parseImportedState,
   replaceDailyImport,
   saveDemoState,
   selectClient,
@@ -222,6 +225,30 @@ export default function App() {
     setShowTeam(false);
   }
 
+  function handleExport() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = exportFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImport(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const imported = parseImportedState(text);
+      setState(imported);
+      setShowTeam(false);
+    } catch (err) {
+      window.alert(err?.message || 'Could not import this file.');
+    }
+  }
+
   function handleParsedFiles(parsed) {
     if (!selectedClient) return;
     const result = reconcileDailyImport({
@@ -264,6 +291,13 @@ export default function App() {
         <div className="sidebar-header">
           <span>Account Manager</span>
           <strong>{state.accountManager.name}</strong>
+          <div className="backup-actions">
+            <button className="ghost-button" onClick={handleExport}><Download size={14} /> Export</button>
+            <label className="ghost-button">
+              <Upload size={14} /> Import
+              <input type="file" accept=".json,application/json" hidden onChange={handleImport} />
+            </label>
+          </div>
         </div>
         <form className="client-form" onSubmit={handleAddClient}>
           <input value={newClientName} placeholder="New client" onChange={(event) => setNewClientName(event.target.value)} />

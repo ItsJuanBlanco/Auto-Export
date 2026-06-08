@@ -4,6 +4,7 @@ import {
   appendDailyImport,
   createInitialState,
   getLatestClientImport,
+  parseImportedState,
   upsertAccountMeta,
 } from './demoStore';
 
@@ -34,5 +35,18 @@ describe('demoStore', () => {
     const withSecond = appendDailyImport(withFirst, clientId, secondImport);
 
     expect(getLatestClientImport(withSecond.clients[0])).toMatchObject({ id: 'two' });
+  });
+
+  it('round-trips an exported backup through parseImportedState', () => {
+    const state = addClient(createInitialState(), 'Amanda Example');
+    const restored = parseImportedState(JSON.stringify(state));
+
+    expect(restored.clients[0].name).toBe('Amanda Example');
+    expect(restored.selectedClientId).toBe(state.clients[0].id);
+  });
+
+  it('rejects files that are not valid CAM backups', () => {
+    expect(() => parseImportedState('{"foo":1}')).toThrow();
+    expect(() => parseImportedState('not json')).toThrow();
   });
 });
