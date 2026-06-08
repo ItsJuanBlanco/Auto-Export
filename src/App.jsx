@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   BarChart3,
   CalendarDays,
   CheckCircle2,
@@ -29,6 +30,7 @@ import {
   updateImportStatus,
   upsertAccountMeta,
 } from './domain/demoStore';
+import { buildCamOverview } from './domain/camOverview';
 import { recalculateDailyImport, reconcileDailyImport } from './domain/reconcile';
 import { buildDailyReportSummary, formatCurrency } from './domain/report';
 
@@ -131,31 +133,112 @@ function ReportPanel({ client, dailyImport, onClose }) {
   );
 }
 
-function TeamOverviewMock({ clients }) {
-  const openFlags = clients.flatMap((client) => client.dailyImports.at(-1)?.flags || []).length;
+function CamOverview({ clients }) {
+  const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
+  const overview = buildCamOverview(clients);
+
   return (
     <main className="content">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Future view</span>
-          <h1>Team Overview</h1>
-          <p>Mock for manager-level visibility across account managers.</p>
+          <span className="eyebrow">Account manager overview</span>
+          <h1>CAM Overview</h1>
+          <p>Algorithm performance across Pedro's latest client closes.</p>
         </div>
       </div>
       <div className="metric-grid">
-        <div className="metric"><span>Pedro clients</span><strong>{clients.length}</strong></div>
-        <div className="metric"><span>Open flags</span><strong>{openFlags}</strong></div>
-        <div className="metric"><span>Mock AMs</span><strong>3</strong></div>
-        <div className="metric"><span>Coverage</span><strong>Manual close</strong></div>
+        <div className="metric"><span>Clients</span><strong>{clients.length}</strong></div>
+        <div className="metric"><span>Algorithms</span><strong>{overview.totals.algorithms}</strong></div>
+        <div className="metric"><span>Accounts running</span><strong>{overview.totals.accounts}</strong></div>
+        <div className="metric"><span>Deviation alerts</span><strong>{overview.totals.openDeviationFlags}</strong></div>
       </div>
+
+      <section className={overview.deviationFlags.length ? 'panel danger-panel' : 'panel'}>
+        <div className="panel-heading"><h3>Deviation alerts</h3><span className="count">{overview.deviationFlags.length}</span></div>
+        {overview.deviationFlags.length ? (
+          <div className="flag-list">
+            {overview.deviationFlags.map((flag) => (
+              <div className="flag warning" key={flag.id}>
+                <AlertTriangle size={16} />
+                <div>
+                  <strong>{flag.algorithm}</strong>
+                  <span>{flag.message} Daily realized: {formatCurrency(flag.realized)}.</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <div className="notice success"><CheckCircle2 size={16} /> No cross-account deviation alerts.</div>}
+      </section>
+
       <section className="panel">
-        <div className="panel-heading"><h3>Account manager rollup</h3></div>
+        <div className="panel-heading"><h3>Algorithm rollup</h3><span className="count">{overview.algorithms.length}</span></div>
+        {overview.algorithms.length ? (
+          <div className="table-wrap">
+            <table className="ops-table cam-overview-table">
+              <thead>
+                <tr>
+                  <th>Algorithm</th>
+                  <th>Version</th>
+                  <th>Accounts</th>
+                  <th>Instances</th>
+                  <th>Avg daily</th>
+                  <th>Avg account weekly</th>
+                  <th>Total daily</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview.algorithms.map((algorithm) => (
+                  <Fragment key={algorithm.key}>
+                    <tr
+                      className="clickable-row"
+                      onClick={() => setExpandedAlgorithm((current) => (current === algorithm.key ? '' : algorithm.key))}
+                    >
+                      <td><strong><ChevronDown className={expandedAlgorithm === algorithm.key ? 'chevron open' : 'chevron'} size={14} /> {algorithm.algorithm}</strong></td>
+                      <td>{algorithm.version || 'Custom'}</td>
+                      <td>{algorithm.accounts}</td>
+                      <td>{algorithm.instances}</td>
+                      <td className={algorithm.avgRealized >= 0 ? 'positive' : 'negative'}>{formatCurrency(algorithm.avgRealized)}</td>
+                      <td className={algorithm.avgAccountWeeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(algorithm.avgAccountWeeklyPnl)}</td>
+                      <td className={algorithm.totalRealized >= 0 ? 'positive' : 'negative'}>{formatCurrency(algorithm.totalRealized)}</td>
+                    </tr>
+                    {expandedAlgorithm === algorithm.key ? (
+                      <tr className="account-detail-row">
+                        <td colSpan="7">
+                          <div className="cam-instance-list">
+                            {algorithm.items.map((item) => (
+                              <div className="cam-instance" key={`${item.clientId}-${item.accountName}-${item.strategyName}`}>
+                                <strong>{item.clientName} · {item.accountAlias}</strong>
+                                <span>{item.strategyName || algorithm.algorithm} · {item.enabled ? 'Enabled' : 'Disabled'}</span>
+                                <span className={item.realized >= 0 ? 'positive' : 'negative'}>Daily realized {formatCurrency(item.realized)}</span>
+                                <span className={item.accountWeeklyPnl >= 0 ? 'positive' : 'negative'}>Account weekly {formatCurrency(item.accountWeeklyPnl)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state compact">
+            <BarChart3 size={24} />
+            <h3>No algorithms yet</h3>
+            <p>Upload daily files for at least one client to populate this overview.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading"><h3>Team preview</h3><span className="badge muted">Mock</span></div>
         <div className="team-grid">
-          {['Pedro', 'Amanda', 'Josh', 'Camila'].map((name, index) => (
+          {['Amanda', 'Josh', 'Camila'].map((name, index) => (
             <div className="team-card" key={name}>
               <strong>{name}</strong>
-              <span>{index === 0 ? `${clients.length} live demo clients` : 'Mock data'}</span>
-              <small>{index === 0 ? `${openFlags} flags` : `${index + 2} clients · ${index} flags`}</small>
+              <span>Mock account manager</span>
+              <small>{index + 2} clients · {index} flags</small>
             </div>
           ))}
         </div>
@@ -201,7 +284,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('Evaluations');
   const [selectedDate, setSelectedDate] = useState(todayIsoDate());
   const [showUpload, setShowUpload] = useState(false);
-  const [showTeam, setShowTeam] = useState(false);
+  const [showOverview, setShowOverview] = useState(false);
   const [reportImport, setReportImport] = useState(null);
   const [registryOpen, setRegistryOpen] = useState(false);
 
@@ -221,7 +304,7 @@ export default function App() {
     event.preventDefault();
     setState((current) => addClient(current, newClientName));
     setNewClientName('');
-    setShowTeam(false);
+    setShowOverview(false);
   }
 
   function handleExport() {
@@ -242,7 +325,7 @@ export default function App() {
       const text = await file.text();
       const imported = parseImportedState(text);
       setState(imported);
-      setShowTeam(false);
+      setShowOverview(false);
     } catch (err) {
       window.alert(err?.message || 'Could not import this file.');
     }
@@ -304,21 +387,21 @@ export default function App() {
           <button><Plus size={16} /></button>
         </form>
         <nav className="client-list">
-          <button className={showTeam ? 'client-link active' : 'client-link'} onClick={() => setShowTeam(true)}>
+          <button className={showOverview ? 'client-link active' : 'client-link'} onClick={() => setShowOverview(true)}>
             <Users size={16} />
-            <span>Team Overview</span>
-            <em>Mock</em>
+            <span>CAM Overview</span>
+            <em>Live</em>
           </button>
           <div className="nav-label">Clients</div>
           {state.clients.map((client) => {
             const badge = deriveClientBadge(client);
             return (
               <button
-                className={!showTeam && selectedClient?.id === client.id ? 'client-link active' : 'client-link'}
+                className={!showOverview && selectedClient?.id === client.id ? 'client-link active' : 'client-link'}
                 key={client.id}
                 onClick={() => {
                   setState((current) => selectClient(current, client.id));
-                  setShowTeam(false);
+                  setShowOverview(false);
                 }}
               >
                 <BarChart3 size={16} />
@@ -330,7 +413,7 @@ export default function App() {
         </nav>
       </aside>
 
-      {showTeam ? <TeamOverviewMock clients={state.clients} /> : (
+      {showOverview ? <CamOverview clients={state.clients} /> : (
         <main className="content">
           {!selectedClient ? (
             <div className="empty-state">

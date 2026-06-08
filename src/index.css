@@ -624,6 +624,43 @@ textarea {
   gap: 6px;
 }
 
+.cam-overview-table td:nth-child(n+3) {
+  white-space: nowrap;
+}
+
+.cam-instance-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  padding: 16px;
+}
+
+.cam-instance {
+  display: grid;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.cam-instance span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cam-instance span.positive {
+  color: var(--green);
+}
+
+.cam-instance span.negative {
+  color: var(--red);
+}
+
+.empty-state.compact {
+  min-height: 180px;
+}
+
 .report-overlay {
   position: fixed;
   inset: 0;
