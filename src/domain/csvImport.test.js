@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { detectNinjaTraderFileType, parseNinjaTraderCsvText, parseStrategyVersion } from './csvImport';
+import {
+  detectNinjaTraderFileType,
+  parseNinjaTraderCsvText,
+  parseStrategyParameters,
+  parseStrategyVersion,
+} from './csvImport';
 
 describe('parseStrategyVersion', () => {
   it('extracts the trailing version number from a strategy name', () => {
@@ -10,6 +15,29 @@ describe('parseStrategyVersion', () => {
   it('returns empty string when no version is present', () => {
     expect(parseStrategyVersion('0 - RBO')).toBe('');
     expect(parseStrategyVersion('')).toBe('');
+  });
+});
+
+describe('parseStrategyParameters', () => {
+  it('parses named NinjaTrader parameters without splitting date values', () => {
+    const parameters = '38/5/22/5/False/30/False/2/True/1/1/2020 4:45:00 PM/V-KEY-W/Both/3/3/2/125/150/200/127/100/1/1/2020 11:30:00 AM/1/1/2020 10:00:00 AM/True/70/15/True (B2X1/B2X2/B2X3/B2X4/Backtest/BreakEvenAfterTicks/BreakEvenIsOn/BreakEvenOffset/CloseAllOpenTrades/CloseAllOpenTradeTime/LicenseKey/MyTradeDirection/PosSize1/PosSize2/PosSize3/ProfitTargetTicks1/ProfitTargetTicks2/ProfitTargetTicks3/StartTrailAfterTicks/StopLossTicks/TradeEndTime/TradeStartTime/TradeWindowIsOn/TrailByTicks/TrailFrequency/TrailIsOn)';
+
+    expect(parseStrategyParameters(parameters)).toMatchObject({
+      parsed: true,
+      direction: 'Both',
+      posSizes: [3, 3, 2],
+      profitTargets: [125, 150, 200],
+      stopLossTicks: 100,
+      tradeWindow: ['1/1/2020 10:00:00 AM', '1/1/2020 11:30:00 AM'],
+      valuesByName: {
+        CloseAllOpenTradeTime: '1/1/2020 4:45:00 PM',
+        LicenseKey: 'V-KEY-W',
+      },
+    });
+  });
+
+  it('fails closed when parameter values cannot realign to names', () => {
+    expect(parseStrategyParameters('1/2/3 (First/Second)')).toEqual({ parsed: false });
   });
 });
 
@@ -78,6 +106,11 @@ describe('csvImport', () => {
     expect(parsed.rows[0]).toMatchObject({
       strategyFamily: 'Bullet Bot',
       direction: 'Short',
+      params: expect.objectContaining({
+        parsed: true,
+        direction: 'Short',
+        stopLossTicks: 110,
+      }),
     });
   });
 

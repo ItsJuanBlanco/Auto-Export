@@ -36,6 +36,15 @@ function formatPrice(value) {
   return Number.isFinite(number) ? number.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '';
 }
 
+function formatStrategySettings(strategy) {
+  if (!strategy.params?.parsed) return '';
+  const parts = [];
+  if (strategy.params.posSizes?.length) parts.push(`Contracts ${strategy.params.posSizes.join('/')}`);
+  if (strategy.params.stopLossTicks != null) parts.push(`Stop ${strategy.params.stopLossTicks}t`);
+  if (strategy.params.profitTargets?.length) parts.push(`Targets ${strategy.params.profitTargets.join('/')}t`);
+  return parts.join(' · ');
+}
+
 function AccountDetail({ row, executions, colSpan = 7 }) {
   const [expandedStrategy, setExpandedStrategy] = useState('');
   const accountExecutions = executions.filter((execution) => execution.accountName === row.accountName);
@@ -50,6 +59,7 @@ function AccountDetail({ row, executions, colSpan = 7 }) {
                 {row.strategies.map((strategy) => {
                   const key = `${row.accountName}-${strategy.strategyName}`;
                   const strategyExecutions = accountExecutions.filter((execution) => execution.strategyName === strategy.strategyName);
+                  const settings = formatStrategySettings(strategy);
                   return (
                     <div className="strategy-detail" key={key}>
                       <button
@@ -59,6 +69,7 @@ function AccountDetail({ row, executions, colSpan = 7 }) {
                         <span>
                           <strong><ChevronDown className={expandedStrategy === key ? 'chevron open' : 'chevron'} size={14} /> {strategy.strategyName}</strong>
                           <small>{strategy.instrument} · {strategy.enabled ? 'Enabled' : 'Disabled'}{strategy.strategyFamily === 'Bullet Bot' && strategy.direction ? ` · ${strategy.direction}` : ''}</small>
+                          {settings ? <small>{settings}</small> : null}
                         </span>
                         <span>
                           <small>Realized {formatCurrency(strategy.realized)} · Unrealized {formatCurrency(strategy.unrealized)}</small>

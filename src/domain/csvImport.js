@@ -88,16 +88,81 @@ function parseBool(value) {
   return String(value || '').trim().toLowerCase() === 'true';
 }
 
+function normalizeDirection(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^(long|short|both)$/i.test(text)) return text[0].toUpperCase() + text.slice(1).toLowerCase();
+  return text;
+}
+
 function inferDirection(parametersRaw) {
   const text = String(parametersRaw || '');
   const licenseAnchored = text.match(/\/V-[^/]+\/(Long|Short|Both)\//i);
-  if (licenseAnchored) return licenseAnchored[1][0].toUpperCase() + licenseAnchored[1].slice(1).toLowerCase();
+  if (licenseAnchored) return normalizeDirection(licenseAnchored[1]);
 
   const keyList = text.match(/\(([^)]*MyTradeDirection[^)]*)\)$/i);
   if (!keyList) return '';
 
   const generic = text.match(/\/(Long|Short|Both)\//i);
-  return generic ? generic[1][0].toUpperCase() + generic[1].slice(1).toLowerCase() : '';
+  return generic ? normalizeDirection(generic[1]) : '';
+}
+
+function coalesceDateTokens(tokens) {
+  const result = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const candidate = `${tokens[index]}/${tokens[index + 1]}/${tokens[index + 2]}`;
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M$/i.test(candidate)) {
+      result.push(candidate);
+      index += 2;
+    } else {
+      result.push(tokens[index]);
+    }
+  }
+  return result.map((token) => String(token || '').trim());
+}
+
+function parseParamNumber(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function numberList(values) {
+  return values.map(parseParamNumber).filter((value) => value != null);
+}
+
+export function parseStrategyParameters(parametersRaw) {
+  const text = String(parametersRaw || '').trim();
+  const match = text.match(/^(.*)\s+\(([^)]*)\)$/);
+  if (!match) return { parsed: false };
+
+  const names = match[2].split('/').map((name) => name.trim()).filter(Boolean);
+  const values = coalesceDateTokens(match[1].split('/'));
+  if (!names.length || values.length !== names.length) return { parsed: false };
+
+  const valuesByName = Object.fromEntries(names.map((name, index) => [name, values[index]]));
+  const direction = normalizeDirection(valuesByName.MyTradeDirection);
+  const posSizes = numberList([
+    valuesByName.PosSize1,
+    valuesByName.PosSize2,
+    valuesByName.PosSize3,
+    valuesByName.PositionSize,
+  ]);
+  const profitTargets = numberList([
+    valuesByName.ProfitTargetTicks1,
+    valuesByName.ProfitTargetTicks2,
+    valuesByName.ProfitTargetTicks3,
+    valuesByName.ProfitTargetTicks,
+  ]);
+
+  return {
+    parsed: true,
+    valuesByName,
+    direction,
+    posSizes,
+    profitTargets,
+    stopLossTicks: parseParamNumber(valuesByName.StopLossTicks),
+    tradeWindow: [valuesByName.TradeStartTime || valuesByName.TradeStart1 || '', valuesByName.TradeEndTime || valuesByName.TradeEnd1 || ''],
+  };
 }
 
 function normalizeRow(row) {
@@ -145,6 +210,7 @@ function mapAccount(row) {
 
 function mapStrategy(row) {
   const parametersRaw = row.parameters || '';
+  const params = parseStrategyParameters(parametersRaw);
   return {
     strategyName: row.strategy || '',
     strategyFamily: normalizeStrategyFamily(row.strategy),
@@ -153,7 +219,8 @@ function mapStrategy(row) {
     accountName: row.accountDisplayName || '',
     dataSeries: row.dataSeries || '',
     parametersRaw,
-    direction: inferDirection(parametersRaw),
+    params,
+    direction: params.parsed && params.direction ? params.direction : inferDirection(parametersRaw),
     unrealized: parseCurrency(row.unrealized),
     realized: parseCurrency(row.realized),
     connection: row.connection || '',
