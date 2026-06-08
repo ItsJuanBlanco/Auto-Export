@@ -101,6 +101,9 @@ export function normalizeStrategyFamily(strategyName) {
   const cleaned = String(strategyName || '').replace(/^\d+\s*-\s*/, '').trim();
   if (/bullet\s*bot/i.test(cleaned)) return 'Bullet Bot';
 
+  const pfMatch = cleaned.match(/^([A-Z0-9]+)-PF\b/i);
+  if (pfMatch) return `${pfMatch[1].toUpperCase()}_PF`;
+
   const [prefix] = cleaned.split('-');
   const token = prefix.trim().toUpperCase();
   if (KNOWN_FAMILIES.includes(token)) return token;

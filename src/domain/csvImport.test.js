@@ -41,6 +41,20 @@ describe('csvImport', () => {
     });
   });
 
+  it('normalizes prop firm strategy families with PF suffix', () => {
+    const csv = [
+      'Strategy,Instrument,Account display name,Data series,Parameters,Unrealized,Realized,Connection,Enabled',
+      '0 - IFSP-PF-1.1,NG JUL26,ACC1,8 Minute,raw,$0.00,$0.00,Legends Trading,True',
+    ].join('\n');
+
+    const parsed = parseNinjaTraderCsvText(csv, 'strategies.csv');
+
+    expect(parsed.rows[0]).toMatchObject({
+      strategyName: '0 - IFSP-PF-1.1',
+      strategyFamily: 'IFSP_PF',
+    });
+  });
+
   it('detects orders files by headers regardless of file name', () => {
     const csv = [
       'State,Account display name,Strategy,Instrument,Action,Type,Quantity,Limit,Stop,Filled,Avg. price,Remaining,Name,ID,Time',
