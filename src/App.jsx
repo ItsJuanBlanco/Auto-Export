@@ -106,23 +106,22 @@ function ReportPanel({ client, dailyImport, onClose }) {
           <div><span>Accounts</span><strong>{report.counts.accounts}</strong></div>
           <div><span>Daily/Gross PnL</span><strong>{formatCurrency(report.totals.grossRealizedPnl)}</strong></div>
           <div><span>Weekly PnL</span><strong>{formatCurrency(report.totals.weeklyPnl)}</strong></div>
-          <div><span>Aggregate balance</span><strong>{formatCurrency(report.totals.aggregateBalance)}</strong></div>
         </section>
         {['evaluations', 'funded', 'cash'].map((group) => report.grouped[group].length ? (
           <section className="report-section" key={group}>
             <h2>{group === 'cash' ? 'Cash Accounts' : group}</h2>
-            <div className="report-row report-row-head">
+            <div className={group === 'cash' ? 'report-row report-row-head cash' : 'report-row report-row-head'}>
               <strong>Account</strong>
               <span>Status</span>
               <span>Daily PnL</span>
-              <span>{group === 'cash' ? 'Cash balance' : 'Aggregate balance'}</span>
+              {group === 'cash' ? <span>Cash balance</span> : null}
             </div>
             {report.grouped[group].map((row) => (
-              <div className="report-row" key={row.accountName}>
+              <div className={group === 'cash' ? 'report-row cash' : 'report-row'} key={row.accountName}>
                 <strong>{row.meta?.alias || row.accountName}</strong>
                 <span>{row.meta?.status || 'Active'}</span>
                 <span>{formatCurrency(row.grossRealizedPnl)}</span>
-                <span>{formatCurrency(row.accountBalance)}</span>
+                {group === 'cash' ? <span>{formatCurrency(row.accountBalance)}</span> : null}
               </div>
             ))}
           </section>
@@ -286,6 +285,7 @@ export default function App() {
   }
 
   return (
+    <>
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
@@ -395,8 +395,8 @@ export default function App() {
           )}
         </main>
       )}
-
-      {reportImport ? <ReportPanel client={selectedClient} dailyImport={reportImport} onClose={() => setReportImport(null)} /> : null}
     </div>
+    {reportImport ? <ReportPanel client={selectedClient} dailyImport={reportImport} onClose={() => setReportImport(null)} /> : null}
+    </>
   );
 }

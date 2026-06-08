@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { detectNinjaTraderFileType, parseNinjaTraderCsvText } from './csvImport';
+import { detectNinjaTraderFileType, parseNinjaTraderCsvText, parseStrategyVersion } from './csvImport';
+
+describe('parseStrategyVersion', () => {
+  it('extracts the trailing version number from a strategy name', () => {
+    expect(parseStrategyVersion('0 - ARPD-1.8')).toBe('1.8');
+    expect(parseStrategyVersion('0 - Bullet Bot-1.1')).toBe('1.1');
+  });
+
+  it('returns empty string when no version is present', () => {
+    expect(parseStrategyVersion('0 - RBO')).toBe('');
+    expect(parseStrategyVersion('')).toBe('');
+  });
+});
 
 describe('csvImport', () => {
   it('detects accounts files by headers regardless of column order', () => {

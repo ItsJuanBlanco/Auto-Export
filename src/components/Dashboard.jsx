@@ -44,7 +44,7 @@ function AccountDetail({ row, executions, colSpan = 7 }) {
                 {row.strategies.map((strategy) => (
                   <div className="strategy-detail" key={`${row.accountName}-${strategy.strategyName}`}>
                     <strong>{strategy.strategyName}</strong>
-                    <span>{strategy.instrument} · {strategy.enabled ? 'Enabled' : 'Disabled'}{strategy.direction ? ` · ${strategy.direction}` : ''}</span>
+                    <span>{strategy.instrument} · {strategy.enabled ? 'Enabled' : 'Disabled'}{strategy.strategyFamily === 'Bullet Bot' && strategy.direction ? ` · ${strategy.direction}` : ''}</span>
                     <span>Realized {formatCurrency(strategy.realized)} · Unrealized {formatCurrency(strategy.unrealized)}</span>
                   </div>
                 ))}
@@ -81,7 +81,7 @@ function AccountTable({ title, rows, executions, mode }) {
               <th>Strategies</th>
               <th>Daily PnL</th>
               <th>Weekly PnL</th>
-              <th>Aggregate balance</th>
+              {isCash ? <th>Cash balance</th> : null}
               {!isCash ? <th>Drawdown</th> : null}
             </tr>
           </thead>
@@ -101,16 +101,16 @@ function AccountTable({ title, rows, executions, mode }) {
                   <td>
                     {row.strategies?.length ? row.strategies.map((strategy) => (
                       <span className={strategy.enabled ? 'strategy enabled' : 'strategy'} key={`${row.accountName}-${strategy.strategyName}`}>
-                        {strategy.strategyFamily || strategy.strategyName}{strategy.direction ? ` · ${strategy.direction}` : ''}
+                        {strategy.strategyFamily || strategy.strategyName}{strategy.strategyVersion ? ` ${strategy.strategyVersion}` : ''}{strategy.strategyFamily === 'Bullet Bot' && strategy.direction ? ` · ${strategy.direction}` : ''}
                       </span>
                     )) : <span className="muted">None</span>}
                   </td>
                   <td className={row.grossRealizedPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.grossRealizedPnl)}</td>
                   <td className={row.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.weeklyPnl)}</td>
-                  <td>{formatCurrency(row.accountBalance)}</td>
+                  {isCash ? <td>{formatCurrency(row.accountBalance)}</td> : null}
                   {!isCash ? <td>{formatCurrency(row.trailingMaxDrawdown)}</td> : null}
                 </tr>
-                {expandedAccount === row.accountName ? <AccountDetail row={row} executions={executions} colSpan={isCash ? 5 : 7} /> : null}
+                {expandedAccount === row.accountName ? <AccountDetail row={row} executions={executions} colSpan={isCash ? 5 : 6} /> : null}
               </Fragment>
             ))}
           </tbody>
@@ -175,7 +175,14 @@ export default function Dashboard({ dailyImport, rows = [], title, mode, onBuild
         )}
       </section>
 
-      <AccountTable title={title} rows={rows} executions={dailyImport.executions || []} mode={mode} />
+      {title === 'Evaluations' ? (
+        <>
+          <AccountTable title="Bullet Bot" rows={rows.filter((row) => row.meta?.accountType === 'Evaluation - Bullet Bot')} executions={dailyImport.executions || []} mode={mode} />
+          <AccountTable title="Standard Evaluations" rows={rows.filter((row) => row.meta?.accountType === 'Evaluation - Standard')} executions={dailyImport.executions || []} mode={mode} />
+        </>
+      ) : (
+        <AccountTable title={title} rows={rows} executions={dailyImport.executions || []} mode={mode} />
+      )}
     </div>
   );
 }

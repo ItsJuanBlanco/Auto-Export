@@ -75,6 +75,14 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   font-size: 12px;
   padding: 6px 8px;
   cursor: pointer;
+  background: #ffffff;
+  color: #1b2733;
+  border-color: #b9d2e0;
+  font-weight: 700;
+}
+
+.backup-actions .ghost-button:hover {
+  background: #eef6fb;
 }
 
 .client-form {
@@ -691,10 +699,14 @@ textarea {
 
 .report-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 12px;
   border-bottom: 1px solid #e2e8f0;
   padding: 10px 0;
+}
+
+.report-row.cash {
+  grid-template-columns: 2fr 1fr 1fr 1fr;
 }
 
 @media (max-width: 980px) {

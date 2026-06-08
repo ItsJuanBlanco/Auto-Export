@@ -125,6 +125,11 @@ export function normalizeStrategyFamily(strategyName) {
   return token || 'Unknown';
 }
 
+export function parseStrategyVersion(strategyName) {
+  const match = String(strategyName || '').match(/-\s*(\d+(?:\.\d+)+)\s*$/);
+  return match ? match[1] : '';
+}
+
 function mapAccount(row) {
   return {
     connectionStatus: row.connectionStatus || '',
@@ -143,6 +148,7 @@ function mapStrategy(row) {
   return {
     strategyName: row.strategy || '',
     strategyFamily: normalizeStrategyFamily(row.strategy),
+    strategyVersion: parseStrategyVersion(row.strategy),
     instrument: row.instrument || '',
     accountName: row.accountDisplayName || '',
     dataSeries: row.dataSeries || '',
