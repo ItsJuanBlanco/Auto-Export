@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'cam_crm_demo_state_v1';
+const DEMO_STATE_VERSION = 3;
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -149,6 +150,8 @@ export function createDemoState() {
   const rboWeak = demoStrategy({ family: 'RBO_PF', realized: -430 });
   const ifsp = demoStrategy({ family: 'IFSP', version: '1.1', realized: -330, stop: 100, targets: [125, 150, 200], sizes: [3, 3, 2], instrument: 'GC AUG26' });
   const ogx = demoStrategy({ family: 'OGX_PF', version: '2.4', realized: 220, stop: 90, targets: [100, 125, 175], sizes: [2, 2, 1], instrument: 'MNQ JUN26' });
+  const b2x = demoStrategy({ family: 'B2X', version: '1.3', realized: 310, stop: 95, targets: [110, 135, 190], sizes: [2, 2, 2], instrument: 'MGC AUG26' });
+  const urgo = demoStrategy({ family: 'URGO', version: '2.0', realized: -70, stop: 80, targets: [95, 120, 160], sizes: [1, 1, 1], instrument: 'MES JUN26' });
   const bulletLong = demoBullet({ direction: 'Long', realized: 0 });
   const bulletShort = demoBullet({ slot: 1, direction: 'Short', realized: -1200 });
 
@@ -253,19 +256,41 @@ export function createDemoState() {
         demoFlag('Unexpected strategy active', 'Critical', 'ED6200', 'BlueSky - 6200 is inactive but has an enabled strategy. Calculation: status in Inactive/Reserve/Failed and active strategy count > 0.'),
       ],
     }),
+    demoClient({
+      id: 'client-sarah-training',
+      name: 'Sarah Training Pool',
+      registry: {
+        SARH4101: { accountName: 'SARH4101', alias: 'Apex - 4101', connection: 'Apex', accountType: 'Evaluation - Standard', status: 'Active', payoutState: 'Not requested' },
+        SARH4102: { accountName: 'SARH4102', alias: 'Lucid - 4102', connection: 'Lucid', accountType: 'Funded', status: 'Active', payoutState: 'Clear to trade' },
+        SARH4103: { accountName: 'SARH4103', alias: 'BlueSky - 4103', connection: 'BlueSky', accountType: 'Evaluation - Bullet Bot', status: 'Reserve', payoutState: 'Not requested', bulletBotPassType: '2 Day Pass' },
+      },
+      snapshots: [
+        demoSnapshot({ accountName: 'SARH4101', connection: 'Apex', grossRealizedPnl: 310, weeklyPnl: 760, balance: 50310, drawdown: -870, strategies: [b2x] }),
+        demoSnapshot({ accountName: 'SARH4102', connection: 'Lucid', grossRealizedPnl: -70, weeklyPnl: -140, balance: 49930, drawdown: -1200, strategies: [urgo] }),
+        demoSnapshot({ accountName: 'SARH4103', connection: 'BlueSky', grossRealizedPnl: 0, weeklyPnl: 0, balance: 50000, drawdown: -300, strategies: [] }),
+      ],
+      executions: [
+        ...demoExecution({ accountName: 'SARH4101', strategyName: b2x.strategyName, base: 3210 }),
+        ...demoExecution({ accountName: 'SARH4102', strategyName: urgo.strategyName, base: 6120, down: true }),
+      ],
+      flags: [
+        demoFlag('Rotation reserve', 'Warning', 'SARH4103', 'BlueSky - 4103 is reserved for Bullet Bot rotation and should stay flat until assigned. Calculation: account status = Reserve and enabled strategy count = 0.'),
+      ],
+    }),
   ];
 
   return {
+    demoVersion: DEMO_STATE_VERSION,
     accountManager: {
       id: 'am-pedro',
       name: 'Pedro',
     },
     camProfiles: [
-      { id: 'am-pedro', name: 'Pedro', role: 'Senior CAM', status: 'Active', live: true, clientIds: clients.map((client) => client.id) },
-      { id: 'am-amanda', name: 'Amanda', role: 'CAM', status: 'Active', live: false, clients: 9, accounts: 44, weeklyPnl: 1280, dailyPnl: 340, flags: 3 },
-      { id: 'am-juan', name: 'Juan Pablo', role: 'CAM', status: 'Active', live: false, clients: 7, accounts: 31, weeklyPnl: -420, dailyPnl: -180, flags: 5 },
-      { id: 'am-ed', name: 'Ed', role: 'CAM', status: 'Active', live: false, clients: 11, accounts: 52, weeklyPnl: 2140, dailyPnl: 720, flags: 1 },
-      { id: 'am-sarah', name: 'Sarah', role: 'Junior CAM', status: 'Training', live: false, clients: 4, accounts: 18, weeklyPnl: 260, dailyPnl: 90, flags: 2 },
+      { id: 'am-pedro', name: 'Pedro', role: 'Senior CAM', status: 'Active', live: true, clientIds: ['client-rome', 'client-todd', 'client-blanco'] },
+      { id: 'am-amanda', name: 'Amanda', role: 'CAM', status: 'Active', live: true, clientIds: ['client-amanda'] },
+      { id: 'am-juan', name: 'Juan Pablo', role: 'CAM', status: 'Active', live: true, clientIds: ['client-blanco'] },
+      { id: 'am-ed', name: 'Ed', role: 'CAM', status: 'Active', live: true, clientIds: ['client-ed'] },
+      { id: 'am-sarah', name: 'Sarah', role: 'Junior CAM', status: 'Training', live: true, clientIds: ['client-sarah-training'] },
     ],
     clients,
     selectedClientId: 'client-rome',
@@ -276,7 +301,7 @@ export function createInitialState() {
   return createDemoState();
 }
 
-export function addClient(state, name) {
+export function addClient(state, name, camId = state.accountManager?.id) {
   const trimmed = String(name || '').trim();
   if (!trimmed) return state;
 
@@ -299,6 +324,11 @@ export function addClient(state, name) {
   return {
     ...state,
     clients: [...state.clients, client],
+    camProfiles: (state.camProfiles || []).map((profile) => (
+      profile.id === camId
+        ? { ...profile, clientIds: [...new Set([...(profile.clientIds || []), client.id])], live: true }
+        : profile
+    )),
     selectedClientId: client.id,
   };
 }
@@ -316,14 +346,23 @@ export function addCamProfile(state, name) {
         name: trimmed,
         role: 'CAM',
         status: 'New',
-        live: false,
-        clients: 0,
-        accounts: 0,
-        weeklyPnl: 0,
-        dailyPnl: 0,
-        flags: 0,
+        live: true,
+        clientIds: [],
       },
     ],
+  };
+}
+
+export function selectCam(state, camId) {
+  const profile = (state.camProfiles || []).find((cam) => cam.id === camId);
+  const firstClientId = profile?.clientIds?.[0] || null;
+  return {
+    ...state,
+    accountManager: {
+      id: profile?.id || camId,
+      name: profile?.name || 'CAM',
+    },
+    selectedClientId: firstClientId,
   };
 }
 
@@ -416,17 +455,28 @@ export function parseImportedState(text) {
   }
   return {
     accountManager: data.accountManager,
+    demoVersion: data.demoVersion || 0,
     camProfiles: data.camProfiles || [],
     clients: data.clients,
     selectedClientId: data.selectedClientId || data.clients[0]?.id || null,
   };
 }
 
+function isStaleDemoState(state) {
+  if (!state || typeof state !== 'object') return true;
+  if (state.demoVersion !== DEMO_STATE_VERSION) return true;
+  if (!Array.isArray(state.clients) || !state.clients.length) return true;
+  if (!Array.isArray(state.camProfiles) || !state.camProfiles.length) return true;
+  return state.camProfiles.some((profile) => !Array.isArray(profile.clientIds));
+}
+
 export function loadDemoState() {
   if (typeof window === 'undefined') return createInitialState();
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : createInitialState();
+    if (!raw) return createInitialState();
+    const parsed = JSON.parse(raw);
+    return isStaleDemoState(parsed) ? createInitialState() : parsed;
   } catch {
     return createInitialState();
   }

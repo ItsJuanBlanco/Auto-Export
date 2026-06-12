@@ -26,6 +26,7 @@ import {
   parseImportedState,
   replaceDailyImport,
   saveDemoState,
+  selectCam,
   selectClient,
   todayIsoDate,
   updateClientDetails,
@@ -130,6 +131,13 @@ function buildTeamHistory(clients = []) {
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function clientsForCam(clients = [], camProfile = null) {
+  const clientIds = camProfile?.clientIds || [];
+  if (!clientIds.length) return [];
+  const allowed = new Set(clientIds);
+  return clients.filter((client) => allowed.has(client.id));
+}
+
 function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState('manager');
   const [password, setPassword] = useState('demo');
@@ -158,13 +166,12 @@ function LoginScreen({ onLogin }) {
 
 function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam }) {
   const [newCamName, setNewCamName] = useState('');
-  const liveSummary = buildManagerSummary(clients);
   const teamHistory = buildTeamHistory(clients);
-  const cams = (camProfiles.length ? camProfiles : createDemoState().camProfiles).map((profile) => (
-    profile.live
-      ? { ...profile, role: 'Live CAM', clients: liveSummary.clients, accounts: liveSummary.accounts, weeklyPnl: liveSummary.weeklyPnl, dailyPnl: liveSummary.dailyPnl, flags: liveSummary.openFlags }
-      : profile
-  ));
+  const cams = (camProfiles.length ? camProfiles : createDemoState().camProfiles).map((profile) => {
+    const summary = buildManagerSummary(clientsForCam(clients, profile));
+    return { ...profile, ...summary, flags: summary.openFlags };
+  });
+  const allAlgorithms = buildManagerSummary(clients).algorithms;
   const totals = cams.reduce((acc, cam) => ({
     clients: acc.clients + cam.clients,
     accounts: acc.accounts + cam.accounts,
@@ -185,7 +192,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
         <span className="eyebrow">Platform</span>
         <strong>Vincere CRM</strong>
         <button className="client-link active"><Users size={16} /><span>Manager Overview</span><em>Demo</em></button>
-        <button className="client-link" onClick={onOpenCam}><BarChart3 size={16} /><span>Pedro CAM</span><em>Live</em></button>
+        {(camProfiles.length ? camProfiles : cams).map((cam) => (
+          <button className="client-link" key={cam.id} onClick={() => onOpenCam(cam.id)}>
+            <BarChart3 size={16} />
+            <span>{cam.name} CAM</span>
+            <em>{cam.status || 'Live'}</em>
+          </button>
+        ))}
       </aside>
       <section className="content">
         <div className="page-header">
@@ -196,7 +209,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           </div>
           <div className="header-actions">
             <button className="secondary-button" onClick={onLoadDemo}><Download size={16} /> Reload Demo Data</button>
-            <button className="primary-button" onClick={onOpenCam}><BarChart3 size={16} /> Open Pedro Workspace</button>
+            <button className="primary-button" onClick={() => onOpenCam('am-pedro')}><BarChart3 size={16} /> Open Pedro Workspace</button>
           </div>
         </div>
 
@@ -210,7 +223,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
         <div className="metric-grid">
           <div className="metric"><span>Team daily PnL</span><strong className={totals.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(totals.dailyPnl)}</strong></div>
           <div className="metric"><span>Team weekly PnL</span><strong className={totals.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(totals.weeklyPnl)}</strong></div>
-          <div className="metric"><span>Running algorithms</span><strong>{Math.max(liveSummary.algorithms, 8)}</strong></div>
+          <div className="metric"><span>Running algorithms</span><strong>{Math.max(allAlgorithms, 8)}</strong></div>
           <div className="metric"><span>Excel analytics</span><strong>Mapped</strong></div>
         </div>
 
@@ -224,7 +237,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           </div>
           <div className="cam-card-grid">
             {cams.map((cam) => (
-              <button className={cam.live ? 'cam-card live' : 'cam-card'} key={cam.name} onClick={cam.live ? onOpenCam : undefined}>
+              <button className="cam-card live" key={cam.id || cam.name} onClick={() => onOpenCam(cam.id)}>
                 <strong>{cam.name}</strong>
                 <span>{cam.role} · {cam.status || 'Active'}</span>
                 <small>{cam.clients} clients · {cam.accounts} accounts · {cam.flags} flags</small>
@@ -296,8 +309,8 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             </div>
             <div className="exception-card warning">
               <strong>Strategy deviation</strong>
-              <span>Triggered when an algorithm instance performs materially worse than peers running the same family/version.</span>
-              <small>Formula: realized_pnl &lt; peer_mean - 1.5 * peer_stdev</small>
+              <span>Triggered when an algorithm instance performs materially worse than peers running the same family/version, or when executions move opposite to peers trading the same instrument.</span>
+              <small>Formula: realized_pnl &lt; peer_mean - 1.5 * peer_stdev OR execution_direction != peer_majority_direction</small>
             </div>
           </div>
         </section>
@@ -391,7 +404,10 @@ function CamOverview({ clients, strategySetRecords = [], strategySetIndexStatus 
                 <AlertTriangle size={16} />
                 <div>
                   <strong>{flag.algorithm}</strong>
-                  <span>{flag.message} Daily realized: {formatCurrency(flag.realized)}.</span>
+                  <span>
+                    {flag.message} Daily realized: {formatCurrency(flag.realized)}.
+                    {flag.executionMove !== undefined ? ` Execution move: ${flag.executionMove > 0 ? '+' : ''}${flag.executionMove.toFixed(2)} vs peer direction ${flag.peerDirection}.` : ''}
+                  </span>
                 </div>
               </div>
             ))}
@@ -567,7 +583,9 @@ export default function App() {
     };
   }, []);
 
-  const selectedClient = state.clients.find((client) => client.id === state.selectedClientId) || state.clients[0] || null;
+  const currentCamProfile = (state.camProfiles || []).find((profile) => profile.id === state.accountManager?.id) || state.camProfiles?.[0] || null;
+  const currentCamClients = clientsForCam(state.clients, currentCamProfile);
+  const selectedClient = currentCamClients.find((client) => client.id === state.selectedClientId) || currentCamClients[0] || null;
   const dailyImport = selectedClient ? getClientImportByDate(selectedClient, selectedDate) : null;
   const visibleTabs = selectedClient ? buildVisibleTabs(selectedClient, dailyImport) : STATIC_TABS;
 
@@ -579,9 +597,16 @@ export default function App() {
 
   function handleAddClient(event) {
     event.preventDefault();
-    setState((current) => addClient(current, newClientName));
+    setState((current) => addClient(current, newClientName, current.accountManager?.id));
     setNewClientName('');
     setShowOverview(false);
+  }
+
+  function openCamWorkspace(camId = 'am-pedro') {
+    setState((current) => selectCam(current, camId));
+    setPlatformView('cam');
+    setShowOverview(false);
+    setRegistryOpen(false);
   }
 
   function handleExport() {
@@ -653,7 +678,7 @@ export default function App() {
       <ManagerOverview
         clients={state.clients}
         camProfiles={state.camProfiles}
-        onOpenCam={() => setPlatformView('cam')}
+        onOpenCam={openCamWorkspace}
         onLoadDemo={() => setState(createDemoState())}
         onCreateCam={(name) => setState((current) => addCamProfile(current, name))}
       />
@@ -666,7 +691,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <span>Account Manager</span>
-          <strong>{state.accountManager.name}</strong>
+          <strong>{currentCamProfile?.name || state.accountManager.name}</strong>
           <div className="backup-actions">
             <button className="ghost-button" onClick={() => setPlatformView('manager')}><Users size={14} /> Team</button>
             <button className="ghost-button" onClick={handleExport}><Download size={14} /> Export</button>
@@ -686,8 +711,16 @@ export default function App() {
             <span>CAM Overview</span>
             <em>Live</em>
           </button>
+          <div className="nav-label">Other CAMs</div>
+          {(state.camProfiles || []).filter((profile) => profile.id !== state.accountManager?.id).map((profile) => (
+            <button className="client-link" key={profile.id} onClick={() => openCamWorkspace(profile.id)}>
+              <Users size={16} />
+              <span>{profile.name} CAM</span>
+              <em>{profile.status || 'Active'}</em>
+            </button>
+          ))}
           <div className="nav-label">Clients</div>
-          {state.clients.map((client) => {
+          {currentCamClients.map((client) => {
             const badge = deriveClientBadge(client);
             return (
               <button
@@ -709,7 +742,7 @@ export default function App() {
 
       {showOverview ? (
         <CamOverview
-          clients={state.clients}
+          clients={currentCamClients}
           strategySetRecords={strategySetIndex.records}
           strategySetIndexStatus={strategySetIndex.status}
         />
@@ -719,7 +752,7 @@ export default function App() {
             <div className="empty-state">
               <Users size={28} />
               <h2>Create your first client</h2>
-              <p>Add a client in the sidebar, then upload that client's four NinjaTrader files.</p>
+              <p>Add a client for {currentCamProfile?.name || 'this CAM'}, then upload that client's NinjaTrader files.</p>
             </div>
           ) : (
             <>

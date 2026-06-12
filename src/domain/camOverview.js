@@ -33,6 +33,12 @@ function accountMeta(client, importResult, accountName) {
   };
 }
 
+function executionMove(points = []) {
+  const prices = points.map((point) => Number(point.price || 0)).filter((value) => Number.isFinite(value) && value > 0);
+  if (prices.length < 2) return null;
+  return prices.at(-1) - prices[0];
+}
+
 export function buildCamOverview(clients = [], setRecords = []) {
   const groups = new Map();
 
@@ -62,12 +68,14 @@ export function buildCamOverview(clients = [], setRecords = []) {
           strategyName: strategy.strategyName || '',
           algorithm: label.algorithm,
           version: label.version,
+          instrument: strategy.instrument || '',
           realized: Number(strategy.realized || 0),
           unrealized: Number(strategy.unrealized || 0),
           accountWeeklyPnl: Number(snapshot.weeklyPnl || 0),
           enabled: Boolean(strategy.enabled),
           configMatch: matchStrategySet(strategy, setRecords),
           executionPoints,
+          executionMove: executionMove(executionPoints),
         };
 
         if (!groups.has(label.key)) {
@@ -121,14 +129,47 @@ export function buildCamOverview(clients = [], setRecords = []) {
       }));
   });
 
+  const executionDriftFlags = algorithms.flatMap((group) => {
+    const byInstrument = new Map();
+    for (const item of group.items) {
+      if (item.executionMove === null) continue;
+      const key = item.instrument || 'Unknown instrument';
+      if (!byInstrument.has(key)) byInstrument.set(key, []);
+      byInstrument.get(key).push(item);
+    }
+
+    return [...byInstrument.entries()].flatMap(([instrument, items]) => {
+      if (items.length < 3) return [];
+      const up = items.filter((item) => item.executionMove > 0);
+      const down = items.filter((item) => item.executionMove < 0);
+      const majority = up.length > down.length ? 'up' : down.length > up.length ? 'down' : '';
+      if (!majority) return [];
+
+      return items
+        .filter((item) => (majority === 'up' ? item.executionMove < 0 : item.executionMove > 0))
+        .map((item) => ({
+          id: `execution-drift-${group.key}-${instrument}-${item.clientId}-${item.accountName}`,
+          severity: 'Warning',
+          algorithm: group.version ? `${group.algorithm} ${group.version}` : group.algorithm,
+          clientName: item.clientName,
+          accountName: item.accountName,
+          accountAlias: item.accountAlias,
+          message: `${item.clientName} · ${item.accountAlias} moved opposite to peer executions for ${instrument}.`,
+          realized: item.realized,
+          executionMove: item.executionMove,
+          peerDirection: majority,
+        }));
+    });
+  });
+
   return {
     algorithms,
-    deviationFlags,
+    deviationFlags: [...deviationFlags, ...executionDriftFlags],
     totals: {
       algorithms: algorithms.length,
       accounts: new Set(algorithms.flatMap((group) => group.items.map((item) => `${item.clientId}:${item.accountName}`))).size,
       instances: algorithms.reduce((total, group) => total + group.instances, 0),
-      openDeviationFlags: deviationFlags.length,
+      openDeviationFlags: deviationFlags.length + executionDriftFlags.length,
     },
   };
 }
