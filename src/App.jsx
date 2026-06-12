@@ -81,7 +81,7 @@ function buildVisibleTabs(client, dailyImport) {
   if (values.some((account) => account.accountType?.startsWith('Evaluation'))) tabs.push('Evaluations');
   if (values.some((account) => account.accountType === 'Funded')) tabs.push('Funded');
   if (values.some((account) => account.accountType === 'Cash')) tabs.push('Cash');
-  return [...tabs, ...STATIC_TABS];
+  return ['Overview', ...tabs, ...STATIC_TABS];
 }
 
 function tabMode(tab) {
@@ -129,6 +129,103 @@ function buildTeamHistory(clients = []) {
     }
   }
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function clientDailyTotals(client) {
+  return (client?.dailyImports || []).map((dailyImport) => {
+    const snapshots = dailyImport.snapshots || [];
+    return {
+      date: dailyImport.date,
+      dailyPnl: snapshots.reduce((total, snapshot) => total + Number(snapshot.grossRealizedPnl || 0), 0),
+      weeklyPnl: snapshots.reduce((total, snapshot) => total + Number(snapshot.weeklyPnl || 0), 0),
+      balance: snapshots.reduce((total, snapshot) => total + Number(snapshot.accountBalance || 0), 0),
+      accounts: snapshots.length,
+      flags: (dailyImport.flags || []).length,
+    };
+  }).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function buildClientOverview(client, dailyImport) {
+  const history = clientDailyTotals(client);
+  const latest = dailyImport || client?.dailyImports?.at(-1) || null;
+  const latestSnapshots = latest?.snapshots || [];
+  const registry = { ...(latest?.accounts || {}), ...(client?.accountRegistry || {}) };
+  const strategyTotals = new Map();
+  const distribution = new Map();
+
+  for (const importDay of client?.dailyImports || []) {
+    for (const snapshot of importDay.snapshots || []) {
+      for (const strategy of snapshot.strategies || []) {
+        const key = strategy.strategyFamily || strategy.strategyName || 'Unknown';
+        const current = strategyTotals.get(key) || { name: key, realized: 0, days: 0, lastThree: [] };
+        current.realized += Number(strategy.realized || 0);
+        current.days += 1;
+        current.lastThree.push(Number(strategy.realized || 0));
+        strategyTotals.set(key, current);
+      }
+    }
+  }
+
+  for (const snapshot of latestSnapshots) {
+    for (const strategy of snapshot.strategies || []) {
+      const key = strategy.strategyFamily || strategy.strategyName || 'Unknown';
+      distribution.set(key, (distribution.get(key) || 0) + 1);
+    }
+  }
+
+  const algorithms = [...strategyTotals.values()]
+    .map((item) => {
+      const recent = item.lastThree.slice(-3);
+      const recentTotal = recent.reduce((total, value) => total + value, 0);
+      return {
+        ...item,
+        recentTotal,
+        temperature: recentTotal > 250 ? 'Hot' : recentTotal < -250 ? 'Cold' : 'Stable',
+      };
+    })
+    .sort((a, b) => Math.abs(b.recentTotal) - Math.abs(a.recentTotal));
+
+  const passProgress = latestSnapshots
+    .map((snapshot) => {
+      const meta = registry[snapshot.accountName] || {};
+      if (meta.accountType === 'Cash' || meta.accountType === 'Inactive / Ignore') return null;
+      const startingBalance = Number(snapshot.accountBalance || 0) >= 90000 ? 100000 : 50000;
+      const target = Number(meta.targetProfit || 0) || startingBalance + (meta.accountType === 'Funded' ? 2000 : 3000);
+      const progress = Math.max(0, Math.min(100, ((Number(snapshot.accountBalance || 0) - startingBalance) / (target - startingBalance || 1)) * 100));
+      return {
+        accountName: snapshot.accountName,
+        alias: meta.alias || snapshot.accountName,
+        accountType: meta.accountType || 'Unassigned',
+        balance: Number(snapshot.accountBalance || 0),
+        target,
+        remaining: Math.max(0, target - Number(snapshot.accountBalance || 0)),
+        progress,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.progress - a.progress);
+
+  const latestTotal = history.at(-1)?.dailyPnl || 0;
+  const priorTotal = history.at(-2)?.dailyPnl || 0;
+  const streak = history.slice(-4);
+  const hotCount = algorithms.filter((item) => item.temperature === 'Hot').length;
+  const coldCount = algorithms.filter((item) => item.temperature === 'Cold').length;
+
+  return {
+    history,
+    algorithms,
+    distribution: [...distribution.entries()].map(([name, count]) => ({ name, count })),
+    passProgress,
+    metrics: {
+      dailyPnl: latestTotal,
+      dailyDelta: latestTotal - priorTotal,
+      accounts: latestSnapshots.length,
+      openFlags: latest?.flags?.length || 0,
+      hotCount,
+      coldCount,
+      streakLabel: streak.every((day) => day.dailyPnl >= 0) ? `${streak.length} day positive streak` : streak.every((day) => day.dailyPnl < 0) ? `${streak.length} day cold streak` : 'Mixed streak',
+    },
+  };
 }
 
 function clientsForCam(clients = [], camProfile = null) {
@@ -365,6 +462,107 @@ function ReportPanel({ client, dailyImport, onClose }) {
   );
 }
 
+function ClientPnlChart({ history = [] }) {
+  const values = history.map((day) => Number(day.dailyPnl || 0));
+  if (!values.length) return <div className="sparkline-empty">No client history yet</div>;
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const spread = max - min || 1;
+  const points = values.map((value, index) => {
+    const x = values.length === 1 ? 300 : (index / (values.length - 1)) * 600;
+    const y = 150 - ((value - min) / spread) * 120;
+    return `${x},${y}`;
+  }).join(' ');
+  const zeroY = 150 - ((0 - min) / spread) * 120;
+
+  return (
+    <div className="client-chart">
+      <svg viewBox="0 0 600 180" role="img" aria-label="Client daily PnL history">
+        <line x1="0" x2="600" y1={zeroY} y2={zeroY} />
+        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="chart-axis">
+        {history.map((day) => <span key={day.date}>{day.date.slice(5)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function ClientOverview({ client, dailyImport }) {
+  const overview = buildClientOverview(client, dailyImport);
+  const maxDistribution = Math.max(...overview.distribution.map((item) => item.count), 1);
+
+  return (
+    <div className="dashboard-stack">
+      <div className="metric-grid">
+        <div className="metric"><span>Latest daily PnL</span><strong className={overview.metrics.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(overview.metrics.dailyPnl)}</strong></div>
+        <div className="metric"><span>Change vs prior close</span><strong className={overview.metrics.dailyDelta >= 0 ? 'positive' : 'negative'}>{formatCurrency(overview.metrics.dailyDelta)}</strong></div>
+        <div className="metric"><span>Accounts tracked</span><strong>{overview.metrics.accounts}</strong></div>
+        <div className="metric"><span>Open flags</span><strong>{overview.metrics.openFlags}</strong></div>
+      </div>
+
+      <section className="panel client-overview-hero">
+        <div>
+          <div className="panel-heading"><h3>Client performance timeline</h3><span className="badge muted">{overview.metrics.streakLabel}</span></div>
+          <ClientPnlChart history={overview.history} />
+        </div>
+        <div className="client-insight-stack">
+          <div><span>Hot algorithms</span><strong className="positive">{overview.metrics.hotCount}</strong></div>
+          <div><span>Cold algorithms</span><strong className={overview.metrics.coldCount ? 'negative' : ''}>{overview.metrics.coldCount}</strong></div>
+          <div><span>Excel analytics mapped</span><strong>Averages · Performance · Historical Data · Accounts History</strong></div>
+        </div>
+      </section>
+
+      <section className="overview-grid">
+        <div className="panel">
+          <div className="panel-heading"><h3>Algorithm temperature</h3><span className="badge muted">Last 3 closes</span></div>
+          <div className="strategy-rank-list">
+            {overview.algorithms.map((algorithm) => (
+              <div className="rank-row algorithm-temp-row" key={algorithm.name}>
+                <strong>{algorithm.name}</strong>
+                <span className={algorithm.recentTotal >= 0 ? 'positive' : 'negative'}>{formatCurrency(algorithm.recentTotal)}</span>
+                <em className={algorithm.temperature === 'Hot' ? 'positive' : algorithm.temperature === 'Cold' ? 'negative' : ''}>{algorithm.temperature}</em>
+              </div>
+            ))}
+            {!overview.algorithms.length ? <p className="muted">No algorithms assigned in this client history.</p> : null}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-heading"><h3>Strategy distribution</h3><span className="badge muted">Latest close</span></div>
+          <div className="distribution-list">
+            {overview.distribution.map((item) => (
+              <div className="distribution-row" key={item.name}>
+                <span>{item.name}</span>
+                <div><i style={{ width: `${(item.count / maxDistribution) * 100}%` }} /></div>
+                <strong>{item.count}</strong>
+              </div>
+            ))}
+            {!overview.distribution.length ? <p className="muted">No active strategy distribution for this close.</p> : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading"><h3>Closest to target</h3><span className="badge muted">Evaluation / funded progress</span></div>
+        <div className="target-list">
+          {overview.passProgress.slice(0, 6).map((account) => (
+            <div className="target-row" key={account.accountName}>
+              <div>
+                <strong>{account.alias}</strong>
+                <span>{account.accountType} · {formatCurrency(account.balance)} balance · {formatCurrency(account.remaining)} remaining</span>
+              </div>
+              <div className="progress-track"><i style={{ width: `${account.progress}%` }} /></div>
+              <em>{Math.round(account.progress)}%</em>
+            </div>
+          ))}
+          {!overview.passProgress.length ? <p className="muted">No target-bearing accounts for this client.</p> : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function CamOverview({ clients, strategySetRecords = [], strategySetIndexStatus }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
   const overview = buildCamOverview(clients, strategySetRecords);
@@ -553,7 +751,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [platformView, setPlatformView] = useState('manager');
   const [newClientName, setNewClientName] = useState('');
-  const [activeTab, setActiveTab] = useState('Evaluations');
+  const [activeTab, setActiveTab] = useState('Overview');
   const [selectedDate, setSelectedDate] = useState(todayIsoDate());
   const [showUpload, setShowUpload] = useState(false);
   const [showOverview, setShowOverview] = useState(false);
@@ -778,6 +976,7 @@ export default function App() {
                 ))}
               </div>
 
+              {effectiveActiveTab === 'Overview' ? <ClientOverview client={selectedClient} dailyImport={dailyImport} /> : null}
               {effectiveActiveTab === 'Credentials & Notes' ? <CredentialsTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
               {effectiveActiveTab === 'Price Checks' ? <PriceChecksTab /> : null}
               {['Review', 'Evaluations', 'Funded', 'Cash'].includes(effectiveActiveTab) ? (

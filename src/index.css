@@ -960,6 +960,131 @@ textarea {
   font-size: 18px;
 }
 
+.client-overview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.client-chart {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.client-chart svg {
+  width: 100%;
+  height: 220px;
+  color: var(--blue);
+}
+
+.client-chart line {
+  stroke: rgba(144, 164, 184, 0.28);
+  stroke-width: 2;
+}
+
+.chart-axis {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.client-insight-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.client-insight-stack div {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.client-insight-stack span,
+.client-insight-stack strong {
+  display: block;
+}
+
+.client-insight-stack span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.client-insight-stack strong {
+  font-size: 18px;
+}
+
+.algorithm-temp-row {
+  grid-template-columns: 1fr auto auto;
+}
+
+.distribution-list,
+.target-list {
+  display: grid;
+  gap: 10px;
+}
+
+.distribution-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 34px;
+  gap: 10px;
+  align-items: center;
+}
+
+.distribution-row span {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.distribution-row div,
+.progress-track {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(144, 164, 184, 0.16);
+}
+
+.distribution-row i,
+.progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.target-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 320px) 48px;
+  gap: 12px;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.target-row span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.target-row em {
+  font-style: normal;
+  font-weight: 900;
+  text-align: right;
+}
+
 .strategy-rank-list,
 .lifecycle-grid {
   display: grid;
@@ -1023,7 +1148,7 @@ textarea {
 @media (max-width: 980px) {
   .app-shell, .manager-shell { grid-template-columns: 1fr; }
   .sidebar, .manager-sidebar { min-height: auto; }
-  .metric-grid, .team-grid, .form-grid, .report-metrics, .cam-card-grid, .overview-grid, .exception-grid, .history-strip { grid-template-columns: 1fr; }
+  .metric-grid, .team-grid, .form-grid, .report-metrics, .cam-card-grid, .overview-grid, .exception-grid, .history-strip, .client-overview-hero, .target-row { grid-template-columns: 1fr; }
   .page-header { flex-direction: column; }
 }
 
