@@ -468,11 +468,13 @@ function ClientPnlChart({ history = [] }) {
   const min = Math.min(...values, 0);
   const max = Math.max(...values, 0);
   const spread = max - min || 1;
-  const points = values.map((value, index) => {
+  const nodes = history.map((day, index) => {
+    const value = Number(day.dailyPnl || 0);
     const x = values.length === 1 ? 300 : (index / (values.length - 1)) * 600;
     const y = 150 - ((value - min) / spread) * 120;
-    return `${x},${y}`;
-  }).join(' ');
+    return { ...day, value, x, y };
+  });
+  const points = nodes.map((node) => `${node.x},${node.y}`).join(' ');
   const zeroY = 150 - ((0 - min) / spread) * 120;
 
   return (
@@ -480,6 +482,11 @@ function ClientPnlChart({ history = [] }) {
       <svg viewBox="0 0 600 180" role="img" aria-label="Client daily PnL history">
         <line x1="0" x2="600" y1={zeroY} y2={zeroY} />
         <polyline points={points} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        {nodes.map((node) => (
+          <circle className="chart-node chart-node-large" key={node.date} cx={node.x} cy={node.y} r="6">
+            <title>{`${node.date} · Daily PnL ${formatCurrency(node.dailyPnl)} · Weekly ${formatCurrency(node.weeklyPnl)} · ${node.accounts} accounts · ${node.flags} flags`}</title>
+          </circle>
+        ))}
       </svg>
       <div className="chart-axis">
         {history.map((day) => <span key={day.date}>{day.date.slice(5)}</span>)}
@@ -695,22 +702,30 @@ function CamOverview({ clients, strategySetRecords = [], strategySetIndexStatus 
 }
 
 function MovementSparkline({ points = [] }) {
-  const prices = points.map((point) => Number(point.price || 0)).filter((value) => Number.isFinite(value) && value > 0);
-  if (!prices.length) return <small className="muted">No execution movement for this strategy.</small>;
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
+  const nodes = points
+    .map((point) => ({ ...point, priceValue: Number(point.price || 0) }))
+    .filter((point) => Number.isFinite(point.priceValue) && point.priceValue > 0);
+  if (!nodes.length) return <small className="muted">No execution movement for this strategy.</small>;
+  const min = Math.min(...nodes.map((point) => point.priceValue));
+  const max = Math.max(...nodes.map((point) => point.priceValue));
   const spread = max - min || 1;
-  const polyline = prices.map((price, index) => {
-    const x = prices.length === 1 ? 100 : (index / (prices.length - 1)) * 180;
-    const y = 42 - ((price - min) / spread) * 34;
-    return `${x},${y}`;
-  }).join(' ');
+  const chartNodes = nodes.map((point, index) => {
+    const x = nodes.length === 1 ? 100 : (index / (nodes.length - 1)) * 180;
+    const y = 42 - ((point.priceValue - min) / spread) * 34;
+    return { ...point, x, y };
+  });
+  const polyline = chartNodes.map((point) => `${point.x},${point.y}`).join(' ');
   return (
     <div className="movement-card">
       <svg viewBox="0 0 180 50" role="img" aria-label="Strategy execution price movement">
         <polyline points={polyline} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        {chartNodes.map((point, index) => (
+          <circle className="chart-node" key={`${point.time}-${point.priceValue}-${index}`} cx={point.x} cy={point.y} r="4">
+            <title>{`${point.time || 'Execution'} · ${point.action || 'Trade'} ${point.quantity || 0} @ ${point.priceValue.toLocaleString('en-US')} · ${point.entryExit || '-'}`}</title>
+          </circle>
+        ))}
       </svg>
-      <small>{prices.length} executions · {prices[0].toLocaleString('en-US')} → {prices.at(-1).toLocaleString('en-US')}</small>
+      <small>{nodes.length} executions · {nodes[0].priceValue.toLocaleString('en-US')} → {nodes.at(-1).priceValue.toLocaleString('en-US')}</small>
     </div>
   );
 }

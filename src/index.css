@@ -585,6 +585,23 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   padding: 8px;
 }
 
+.chart-node {
+  fill: var(--surface);
+  stroke: currentColor;
+  stroke-width: 2;
+  cursor: crosshair;
+  transition: r 120ms ease, fill 120ms ease, stroke-width 120ms ease;
+}
+
+.chart-node:hover {
+  fill: currentColor;
+  stroke-width: 3;
+}
+
+.chart-node-large:hover {
+  r: 8;
+}
+
 .sparkline-empty {
   min-height: 70px;
   display: grid;

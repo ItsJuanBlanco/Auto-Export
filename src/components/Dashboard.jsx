@@ -14,20 +14,28 @@ function Metric({ label, value, tone }) {
 
 function MiniTimeline({ executions }) {
   if (!executions.length) return <div className="sparkline-empty">No executions timeline</div>;
-  const values = executions.map((item) => Number(item.price || 0)).filter((value) => Number.isFinite(value) && value > 0);
+  const values = executions
+    .map((item) => ({ ...item, priceValue: Number(item.price || 0) }))
+    .filter((item) => Number.isFinite(item.priceValue) && item.priceValue > 0);
   if (!values.length) return <div className="sparkline-empty">No price data</div>;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const min = Math.min(...values.map((item) => item.priceValue));
+  const max = Math.max(...values.map((item) => item.priceValue));
   const spread = max - min || 1;
-  const points = values.map((value, index) => {
+  const nodes = values.map((item, index) => {
     const x = values.length === 1 ? 100 : (index / (values.length - 1)) * 220;
-    const y = 54 - ((value - min) / spread) * 44;
-    return `${x},${y}`;
-  }).join(' ');
+    const y = 54 - ((item.priceValue - min) / spread) * 44;
+    return { ...item, x, y };
+  });
+  const points = nodes.map((node) => `${node.x},${node.y}`).join(' ');
 
   return (
     <svg className="sparkline" viewBox="0 0 220 64" role="img" aria-label="Execution price timeline">
       <polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      {nodes.map((node, index) => (
+        <circle className="chart-node" key={`${node.orderId || node.id || index}-${node.time}`} cx={node.x} cy={node.y} r="4">
+          <title>{`${node.time || 'Execution'} · ${node.action || 'Trade'} ${node.quantity || 0} @ ${formatPrice(node.priceValue)} · ${node.entryExit || '-'}`}</title>
+        </circle>
+      ))}
     </svg>
   );
 }
