@@ -807,6 +807,19 @@ textarea {
 
 .briefing-chips { display: flex; gap: 5px; flex-wrap: wrap; }
 
+.briefing-next-action {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .team-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(160px, 1fr));

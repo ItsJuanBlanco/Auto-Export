@@ -1171,29 +1171,40 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
             </div>
           </div>
           <div className="briefing-grid">
-            {briefing.map(({ client, criticalFlags, openFlags, overdueTasks, highTasks, payoutAccounts, dailyPnl, closeStatus, urgency }) => (
-              <button
-                key={client.id}
-                className={`briefing-card briefing-${urgency}`}
-                onClick={() => onSelectClient && onSelectClient(client.id)}
-              >
-                <div className="briefing-card-head">
-                  <strong>{client.name}</strong>
-                  <span className={`briefing-dot briefing-dot-${closeStatus}`} title={closeStatus === 'pending' ? 'No files today' : closeStatus === 'closed' ? 'Closed' : 'Uploaded'} />
-                </div>
-                <em className={dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(dailyPnl)} today</em>
-                <div className="briefing-chips">
-                  {criticalFlags.length ? <span className="task-chip task-chip-high">{criticalFlags.length} critical</span> : null}
-                  {openFlags.length && !criticalFlags.length ? <span className="task-chip">{openFlags.length} flags</span> : null}
-                  {overdueTasks.length ? <span className="task-chip task-chip-high">{overdueTasks.length} overdue</span> : null}
-                  {highTasks.length && !overdueTasks.length ? <span className="task-chip task-chip-due warning">{highTasks.length} high tasks</span> : null}
-                  {payoutAccounts.length ? <span className="task-chip">{payoutAccounts.length} payout</span> : null}
-                  {!criticalFlags.length && !openFlags.length && !overdueTasks.length && !highTasks.length && !payoutAccounts.length
-                    ? <span className="task-chip" style={{ color: 'var(--green)' }}>Clean</span>
-                    : null}
-                </div>
-              </button>
-            ))}
+            {briefing.map(({ client, criticalFlags, openFlags, openTasks, overdueTasks, highTasks, payoutAccounts, dailyPnl, closeStatus, urgency }) => {
+              const nextTask = overdueTasks[0] || highTasks[0] || openTasks[0] || null;
+              const nextFlag = criticalFlags[0] || null;
+              return (
+                <button
+                  key={client.id}
+                  className={`briefing-card briefing-${urgency}`}
+                  onClick={() => onSelectClient && onSelectClient(client.id)}
+                >
+                  <div className="briefing-card-head">
+                    <strong>{client.name}</strong>
+                    <span className={`briefing-dot briefing-dot-${closeStatus}`} title={closeStatus === 'pending' ? 'No files today' : closeStatus === 'closed' ? 'Closed' : 'Uploaded'} />
+                  </div>
+                  <em className={dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(dailyPnl)} today</em>
+                  <div className="briefing-chips">
+                    {criticalFlags.length ? <span className="task-chip task-chip-high">{criticalFlags.length} critical</span> : null}
+                    {openFlags.length && !criticalFlags.length ? <span className="task-chip">{openFlags.length} flags</span> : null}
+                    {overdueTasks.length ? <span className="task-chip task-chip-high">{overdueTasks.length} overdue</span> : null}
+                    {highTasks.length && !overdueTasks.length ? <span className="task-chip task-chip-due warning">{highTasks.length} high tasks</span> : null}
+                    {payoutAccounts.length ? <span className="task-chip">{payoutAccounts.length} payout</span> : null}
+                    {openTasks.length ? <span className="task-chip">{openTasks.length} tasks</span> : null}
+                    {!criticalFlags.length && !openFlags.length && !overdueTasks.length && !highTasks.length && !payoutAccounts.length && !openTasks.length
+                      ? <span className="task-chip" style={{ color: 'var(--green)' }}>Clean</span>
+                      : null}
+                  </div>
+                  {(nextFlag || nextTask) ? (
+                    <p className="briefing-next-action">
+                      {nextFlag ? `⚠ ${nextFlag.type}: ${nextFlag.message.slice(0, 80)}${nextFlag.message.length > 80 ? '…' : ''}` : null}
+                      {!nextFlag && nextTask ? `→ ${nextTask.text.slice(0, 80)}${nextTask.text.length > 80 ? '…' : ''}` : null}
+                    </p>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </section>
       ) : null}
