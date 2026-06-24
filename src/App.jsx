@@ -1358,6 +1358,8 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('Note');
   const [accountName, setAccountName] = useState('');
+  const [filterType, setFilterType] = useState('All');
+  const [filterSearch, setFilterSearch] = useState('');
   const log = client.activityLog || [];
   const accounts = Object.values(client.accountRegistry || {});
 
@@ -1383,6 +1385,12 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
     }
   }
 
+  const filtered = log.filter((entry) => {
+    if (filterType !== 'All' && entry.type !== filterType) return false;
+    if (filterSearch && !entry.text?.toLowerCase().includes(filterSearch.toLowerCase()) && !entry.accountName?.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+    return true;
+  });
+
   return (
     <section className="panel">
       <div className="panel-heading"><h3>Activity log</h3><span className="count">{log.length}</span></div>
@@ -1404,9 +1412,27 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
           rows={3}
         />
       </form>
-      {log.length ? (
+      {log.length > 0 ? (
+        <div className="activity-filter-row">
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <option value="All">All types</option>
+            {ACTIVITY_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+          <input
+            className="activity-search"
+            value={filterSearch}
+            placeholder="Search log..."
+            onChange={(e) => setFilterSearch(e.target.value)}
+          />
+          {(filterType !== 'All' || filterSearch) ? (
+            <button className="ghost-button" onClick={() => { setFilterType('All'); setFilterSearch(''); }}>Clear</button>
+          ) : null}
+          <span className="muted" style={{ fontSize: 12 }}>{filtered.length} of {log.length}</span>
+        </div>
+      ) : null}
+      {filtered.length ? (
         <div className="activity-list">
-          {log.map((entry) => (
+          {filtered.map((entry) => (
             <div className="activity-entry" key={entry.id}>
               <div className="activity-meta">
                 <span className={`activity-type activity-${entry.type?.toLowerCase()}`}>{entry.type || 'Note'}</span>
@@ -1418,7 +1444,11 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
             </div>
           ))}
         </div>
-      ) : <p className="muted">No activity logged yet. Use the form above to log calls, notes, and actions.</p>}
+      ) : log.length ? (
+        <p className="muted">No entries match the current filter.</p>
+      ) : (
+        <p className="muted">No activity logged yet. Use the form above to log calls, notes, and actions.</p>
+      )}
     </section>
   );
 }
