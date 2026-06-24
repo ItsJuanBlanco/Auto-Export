@@ -59,12 +59,39 @@ function formatConfigMatch(match) {
   return [match.risk, match.setVersion, match.period ? `Period ${match.period}` : '', match.passType, match.direction].filter(Boolean).join(' · ');
 }
 
+function buildTradeStats(executions, strategies) {
+  const exits = executions.filter((e) => e.entryExit === 'Exit' || e.entryExit === 'exit');
+  const entries = executions.filter((e) => e.entryExit === 'Entry' || e.entryExit === 'entry');
+  const roundTrips = exits.length;
+  const grossRealized = strategies.reduce((sum, s) => sum + Number(s.realized || 0), 0);
+  const avgPerTrip = roundTrips > 0 ? grossRealized / roundTrips : null;
+  const prices = executions.map((e) => Number(e.price || 0)).filter((p) => p > 0);
+  const priceRange = prices.length >= 2
+    ? { min: Math.min(...prices), max: Math.max(...prices) }
+    : null;
+  return { roundTrips, entries: entries.length, grossRealized, avgPerTrip, priceRange, total: executions.length };
+}
+
 function AccountDetail({ row, executions, colSpan = 7 }) {
   const [expandedStrategy, setExpandedStrategy] = useState('');
   const accountExecutions = executions.filter((execution) => execution.accountName === row.accountName);
+  const tradeStats = buildTradeStats(accountExecutions, row.strategies || []);
   return (
     <tr className="account-detail-row">
       <td colSpan={colSpan}>
+        {tradeStats.total > 0 ? (
+          <div className="trade-stats-bar">
+            <div><span>Round trips</span><strong>{tradeStats.roundTrips}</strong></div>
+            <div><span>Entries / Exits</span><strong>{tradeStats.entries} / {tradeStats.roundTrips}</strong></div>
+            <div><span>Gross realized</span><strong className={tradeStats.grossRealized >= 0 ? 'positive' : 'negative'}>{formatCurrency(tradeStats.grossRealized)}</strong></div>
+            {tradeStats.avgPerTrip !== null ? (
+              <div><span>Avg / round trip</span><strong className={tradeStats.avgPerTrip >= 0 ? 'positive' : 'negative'}>{formatCurrency(tradeStats.avgPerTrip)}</strong></div>
+            ) : null}
+            {tradeStats.priceRange ? (
+              <div><span>Price range</span><strong>{formatPrice(tradeStats.priceRange.min)} → {formatPrice(tradeStats.priceRange.max)}</strong></div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="account-detail">
           <div>
             <h4>Strategies</h4>

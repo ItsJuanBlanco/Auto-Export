@@ -537,6 +537,38 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   padding: 0;
 }
 
+.trade-stats-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 16px;
+  background: var(--surface-2);
+}
+
+.trade-stats-bar > div {
+  flex: 1;
+  display: grid;
+  gap: 3px;
+  padding: 0 16px 0 0;
+  border-right: 1px solid var(--line);
+}
+
+.trade-stats-bar > div:last-child {
+  border-right: none;
+}
+
+.trade-stats-bar span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.trade-stats-bar strong {
+  font-size: 16px;
+}
+
 .account-detail {
   display: grid;
   grid-template-columns: minmax(320px, 1.3fr) minmax(240px, 0.7fr);
