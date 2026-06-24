@@ -1362,6 +1362,79 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
         </section>
       ) : null}
 
+      {(() => {
+        const today = todayIsoDate();
+        const allTasks = clients.flatMap((client) =>
+          (client.tasks || [])
+            .filter((t) => !t.done)
+            .map((t) => ({ ...t, clientName: client.name, clientId: client.id }))
+        );
+        const sorted = allTasks.sort((a, b) => {
+          const overA = a.dueDate && a.dueDate < today;
+          const overB = b.dueDate && b.dueDate < today;
+          if (overA && !overB) return -1;
+          if (!overA && overB) return 1;
+          const prioOrder = { High: 0, Normal: 1, Low: 2 };
+          if ((prioOrder[a.priority] ?? 1) !== (prioOrder[b.priority] ?? 1)) return (prioOrder[a.priority] ?? 1) - (prioOrder[b.priority] ?? 1);
+          if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+          if (a.dueDate) return -1;
+          if (b.dueDate) return 1;
+          return 0;
+        });
+        if (!sorted.length) return null;
+        const overdueCount = sorted.filter((t) => t.dueDate && t.dueDate < today).length;
+        return (
+          <section className={overdueCount ? 'panel danger-panel' : 'panel'}>
+            <div className="panel-heading">
+              <h3>My task inbox</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {overdueCount ? <span className="badge danger">{overdueCount} overdue</span> : null}
+                <span className="badge muted">{sorted.length} open</span>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table className="ops-table">
+                <thead>
+                  <tr>
+                    <th>Task</th>
+                    <th>Client</th>
+                    <th>Priority</th>
+                    <th>Due</th>
+                    <th>Account</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((task) => {
+                    const isOverdue = task.dueDate && task.dueDate < today;
+                    const isToday = task.dueDate === today;
+                    return (
+                      <tr
+                        key={task.id}
+                        className={isOverdue ? 'row-warning clickable-row' : 'clickable-row'}
+                        onClick={() => onSelectClient && onSelectClient(task.clientId)}
+                        title={`Open ${task.clientName} → Tasks`}
+                      >
+                        <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.text}</td>
+                        <td><strong>{task.clientName}</strong></td>
+                        <td>
+                          <span className={task.priority === 'High' ? 'task-chip task-chip-high' : 'task-chip'}>
+                            {task.priority}
+                          </span>
+                        </td>
+                        <td className={isOverdue ? 'negative' : isToday ? 'warning' : ''}>
+                          {task.dueDate ? (isOverdue ? `OVERDUE (${task.dueDate})` : isToday ? 'Today' : task.dueDate) : '—'}
+                        </td>
+                        <td><small>{task.accountName || '—'}</small></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })()}
+
       <div className="metric-grid">
         <div className="metric"><span>Clients</span><strong>{clients.length}</strong></div>
         <div className="metric"><span>Algorithms</span><strong>{overview.totals.algorithms}</strong></div>
