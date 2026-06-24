@@ -4,6 +4,23 @@ import { formatCurrency, summarizeAccountRows } from '../domain/report';
 import { enrichStrategyWithSetMatch } from '../domain/xmlMatch';
 import { PAYOUT_STATES } from '../domain/reconcile';
 
+function drawdownDisplay(row) {
+  const ddLimit = Number(row.meta?.maxDrawdownLimit);
+  const rawDD = Number(row.trailingMaxDrawdown || 0);
+  if (Number.isFinite(ddLimit) && ddLimit > 0) {
+    const remaining = ddLimit - Math.abs(rawDD);
+    if (remaining <= 0) return { label: 'BREACHED', tone: 'negative' };
+    if (remaining <= 500) return { label: `${formatCurrency(remaining)} left`, tone: 'negative' };
+    if (remaining <= 1200) return { label: `${formatCurrency(remaining)} left`, tone: 'warning' };
+    return { label: `${formatCurrency(remaining)} left`, tone: '' };
+  }
+  if (rawDD === 0) return { label: '—', tone: '' };
+  if (rawDD <= 0) return { label: 'BREACHED', tone: 'negative' };
+  if (rawDD <= 500) return { label: `${formatCurrency(rawDD)} buffer`, tone: 'negative' };
+  if (rawDD <= 1200) return { label: `${formatCurrency(rawDD)} buffer`, tone: 'warning' };
+  return { label: `${formatCurrency(rawDD)} buffer`, tone: '' };
+}
+
 function Metric({ label, value, tone }) {
   return (
     <div className="metric">
@@ -217,7 +234,7 @@ function AccountTable({ title, rows, executions, mode, onUpdateAccount }) {
                   <td className={row.grossRealizedPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.grossRealizedPnl)}</td>
                   <td className={row.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.weeklyPnl)}</td>
                   {isCash ? <td>{formatCurrency(row.accountBalance)}</td> : null}
-                  {!isCash ? <td>{formatCurrency(row.trailingMaxDrawdown)}</td> : null}
+                  {!isCash ? (() => { const dd = drawdownDisplay(row); return <td className={dd.tone}>{dd.label}</td>; })() : null}
                   {isFunded ? (() => {
                     const target = Number(row.meta?.targetProfit || 0);
                     const balance = Number(row.accountBalance || 0);

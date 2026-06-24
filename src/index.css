@@ -393,6 +393,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 
 .positive { color: var(--green); }
 .negative { color: var(--red); }
+.warning { color: var(--yellow); font-weight: 600; }
 
 .dashboard-stack {
   display: flex;
