@@ -345,8 +345,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 }
 
 .panel {
-  padding: 14px;
-  margin-bottom: 14px;
+  padding: 16px;
 }
 
 .panel-heading {
@@ -411,6 +410,16 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .badge.success {
   color: var(--green);
   background: rgba(47, 202, 115, 0.12);
+}
+
+.badge.warning {
+  color: var(--yellow);
+  background: rgba(244, 187, 68, 0.12);
+}
+
+.badge.danger {
+  color: var(--red);
+  background: rgba(255, 90, 105, 0.12);
 }
 
 .compact-panel p {
@@ -949,13 +958,13 @@ textarea {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(300px, 1.2fr) minmax(280px, 1fr);
   gap: 14px;
 }
 
 .history-strip {
   display: grid;
-  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 10px;
 }
 
@@ -1209,11 +1218,32 @@ textarea {
 .registry-table input[type="date"] { min-width: 120px; }
 .registry-table input[type="number"] { width: 80px; }
 
-/* Lifecycle metrics grid */
+/* Lifecycle metrics grid — 3 cols so it fits the half-width panel */
 .lifecycle-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
+}
+
+.lifecycle-grid > div {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.lifecycle-grid > div span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lifecycle-grid > div strong {
+  font-size: 20px;
 }
 
 /* Risk level badges on target rows */
@@ -1252,6 +1282,25 @@ textarea {
 .monthly-breakdown-head { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
 .monthly-breakdown-row { border-top: 1px solid var(--line); }
 .monthly-breakdown-row strong { font-weight: 600; }
+
+/* Flag resolve button — use flex push, not absolute */
+.flag { align-items: flex-start; }
+.flag > div { flex: 1; min-width: 0; }
+.flag > div strong { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.flag-resolve-btn { flex-shrink: 0; margin-top: 2px; padding: 4px 6px; opacity: 0.45; border-radius: 6px; }
+.flag-resolve-btn:hover { opacity: 1; background: var(--surface-3); }
+.flag.resolved { opacity: 0.45; background: var(--surface-2) !important; border-color: var(--line) !important; }
+.flag-resolved-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--surface-3);
+  color: var(--muted);
+  vertical-align: middle;
+}
 
 /* Activity log */
 .activity-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }

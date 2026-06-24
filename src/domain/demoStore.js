@@ -411,6 +411,17 @@ export function selectClient(state, clientId) {
   };
 }
 
+export function resolveFlagInImport(state, clientId, importId, flagId) {
+  return updateClient(state, clientId, (client) => ({
+    ...client,
+    dailyImports: (client.dailyImports || []).map((di) =>
+      di.id === importId
+        ? { ...di, flags: di.flags.map((f) => f.id === flagId ? { ...f, status: 'Resolved', resolvedAt: new Date().toISOString() } : f) }
+        : di
+    ),
+  }));
+}
+
 export function addActivityEntry(state, clientId, entry) {
   return updateClient(state, clientId, (client) => ({
     ...client,

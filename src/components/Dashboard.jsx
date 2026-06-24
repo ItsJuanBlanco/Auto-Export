@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, FileText, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, FileText, RefreshCw, X } from 'lucide-react';
 import { formatCurrency, summarizeAccountRows } from '../domain/report';
 import { enrichStrategyWithSetMatch } from '../domain/xmlMatch';
 
@@ -188,7 +188,7 @@ function AccountTable({ title, rows, executions, mode }) {
   );
 }
 
-export default function Dashboard({ dailyImport, rows = [], title, mode, onBuildReport, onRecalculate, strategySetRecords = [] }) {
+export default function Dashboard({ dailyImport, rows = [], title, mode, onBuildReport, onRecalculate, onResolveFlag, strategySetRecords = [] }) {
   if (!dailyImport) {
     return (
       <div className="empty-state">
@@ -233,12 +233,17 @@ export default function Dashboard({ dailyImport, rows = [], title, mode, onBuild
         {flags.length ? (
           <div className="flag-list">
             {flags.map((flag) => (
-              <div className={`flag ${flag.severity.toLowerCase()}`} key={flag.id}>
+              <div className={flag.status === 'Resolved' ? 'flag resolved' : `flag ${flag.severity.toLowerCase()}`} key={flag.id}>
                 {flag.severity === 'Critical' ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
                 <div>
-                  <strong>{flag.type}</strong>
+                  <strong>{flag.type}{flag.status === 'Resolved' ? <span className="flag-resolved-badge">Resolved</span> : null}</strong>
                   <span>{flag.message}</span>
                 </div>
+                {flag.status !== 'Resolved' && onResolveFlag ? (
+                  <button className="ghost-button icon-only flag-resolve-btn" title="Mark resolved" onClick={() => onResolveFlag(flag.id)}>
+                    <X size={14} />
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>

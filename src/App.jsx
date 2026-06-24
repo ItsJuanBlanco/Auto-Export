@@ -31,6 +31,7 @@ import {
   loadDemoState,
   parseImportedState,
   replaceDailyImport,
+  resolveFlagInImport,
   saveDemoState,
   selectCam,
   selectClient,
@@ -403,6 +404,36 @@ function buildDisconnectAlerts(client) {
   return alerts;
 }
 
+function buildPayoutPipeline(clients = [], camProfiles = []) {
+  const camById = Object.fromEntries(camProfiles.map((p) => [p.id, p]));
+  const clientCam = {};
+  for (const cam of camProfiles) {
+    for (const id of cam.clientIds || []) clientCam[id] = cam.id;
+  }
+  const rows = [];
+  for (const client of clients) {
+    const camId = clientCam[client.id];
+    const camName = camById[camId]?.name || '—';
+    for (const meta of Object.values(client.accountRegistry || {})) {
+      if (!meta.payoutState || meta.payoutState === 'Not requested') continue;
+      const latest = client.dailyImports?.at(-1);
+      const snapshot = (latest?.snapshots || []).find((s) => s.accountName === meta.accountName);
+      rows.push({
+        clientName: client.name,
+        camName,
+        accountName: meta.accountName,
+        alias: meta.alias || meta.accountName,
+        payoutState: meta.payoutState,
+        balance: Number(snapshot?.accountBalance || 0),
+        targetProfit: Number(meta.targetProfit || 0),
+        payoutCount: meta.payoutCount || 0,
+      });
+    }
+  }
+  const order = ['Payout eligible', 'Request payout', 'Payout requested', 'Payout approved', 'Clear to trade'];
+  return rows.sort((a, b) => order.indexOf(a.payoutState) - order.indexOf(b.payoutState));
+}
+
 function clientsForCam(clients = [], camProfile = null) {
   const clientIds = camProfile?.clientIds || [];
   if (!clientIds.length) return [];
@@ -624,6 +655,33 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           </div>
         </section>
 
+        {(() => {
+          const pipeline = buildPayoutPipeline(clients, camProfiles);
+          if (!pipeline.length) return null;
+          return (
+            <section className="panel">
+              <div className="panel-heading"><h3>Payout pipeline</h3><span className="count">{pipeline.length}</span></div>
+              <div className="table-wrap">
+                <table className="ops-table">
+                  <thead><tr><th>Account</th><th>Client</th><th>CAM</th><th>State</th><th>Balance</th><th>Payouts</th></tr></thead>
+                  <tbody>
+                    {pipeline.map((row) => (
+                      <tr key={`${row.clientName}-${row.accountName}`}>
+                        <td><strong>{row.alias}</strong></td>
+                        <td>{row.clientName}</td>
+                        <td>{row.camName}</td>
+                        <td><span className={`badge ${row.payoutState === 'Payout approved' || row.payoutState === 'Clear to trade' ? 'success' : row.payoutState === 'Payout requested' ? 'warning' : 'muted'}`}>{row.payoutState}</span></td>
+                        <td className="positive">{formatCurrency(row.balance)}</td>
+                        <td>{row.payoutCount}×</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          );
+        })()}
+
         {showUserPanel ? (
           <section className="panel">
             <div className="panel-heading"><h3>Users &amp; Access</h3><Shield size={16} /></div>
@@ -775,7 +833,7 @@ function ClientOverview({ client, dailyImport }) {
         <div className="client-insight-stack">
           <div><span>Hot algorithms</span><strong className="positive">{overview.metrics.hotCount}</strong></div>
           <div><span>Cold algorithms</span><strong className={overview.metrics.coldCount ? 'negative' : ''}>{overview.metrics.coldCount}</strong></div>
-          <div><span>Excel analytics mapped</span><strong>Averages · Performance · Historical Data · Accounts History</strong></div>
+          <div><span>Data tracked</span><strong>Daily PnL · Weekly PnL · Drawdown · Balance</strong></div>
         </div>
       </section>
 
@@ -886,7 +944,7 @@ function ClientOverview({ client, dailyImport }) {
   );
 }
 
-function CamOverview({ clients, strategySetRecords = [], strategySetIndexStatus }) {
+function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
   const overview = buildCamOverview(clients, strategySetRecords);
 
@@ -1001,18 +1059,25 @@ function CamOverview({ clients, strategySetRecords = [], strategySetIndexStatus 
         )}
       </section>
 
-      <section className="panel">
-        <div className="panel-heading"><h3>Team preview</h3><span className="badge muted">Mock</span></div>
-        <div className="team-grid">
-          {['Amanda', 'Josh', 'Camila'].map((name, index) => (
-            <div className="team-card" key={name}>
-              <strong>{name}</strong>
-              <span>Mock account manager</span>
-              <small>{index + 2} clients · {index} flags</small>
-            </div>
-          ))}
-        </div>
-      </section>
+      {camProfiles.length > 0 ? (
+        <section className="panel">
+          <div className="panel-heading"><h3>Team overview</h3><span className="badge muted">All CAMs</span></div>
+          <div className="team-grid">
+            {camProfiles.map((cam) => {
+              const camClients = allClients.filter((c) => cam.clientIds?.includes(c.id));
+              const summary = buildManagerSummary(camClients);
+              return (
+                <div className="team-card" key={cam.id}>
+                  <strong>{cam.name}</strong>
+                  <span>{cam.role || 'CAM'} · {cam.status || 'Active'}</span>
+                  <small>{summary.clients} clients · {summary.accounts} accounts · {summary.openFlags} flags</small>
+                  <em className={summary.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(summary.weeklyPnl)} weekly</em>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
@@ -1257,6 +1322,11 @@ export default function App() {
     setState((current) => updateClientDetails(current, selectedClient.id, patch));
   }
 
+  function handleResolveFlag(flagId) {
+    if (!selectedClient || !dailyImport) return;
+    setState((current) => resolveFlagInImport(current, selectedClient.id, dailyImport.id, flagId));
+  }
+
   function handleAddActivity(entry) {
     if (!selectedClient) return;
     setState((current) => addActivityEntry(current, selectedClient.id, entry));
@@ -1372,6 +1442,8 @@ export default function App() {
       {showOverview ? (
         <CamOverview
           clients={currentCamClients}
+          camProfiles={state.camProfiles || []}
+          allClients={state.clients || []}
           strategySetRecords={strategySetIndex.records}
           strategySetIndexStatus={strategySetIndex.status}
         />
@@ -1420,6 +1492,7 @@ export default function App() {
                     mode={tabMode(effectiveActiveTab)}
                     onBuildReport={() => setReportImport(dailyImport)}
                     onRecalculate={recalculateImport}
+                    onResolveFlag={handleResolveFlag}
                     strategySetRecords={strategySetIndex.records}
                   />
                   <section className="panel">

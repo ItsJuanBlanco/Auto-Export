@@ -170,16 +170,26 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
     }
 
     const ddLimit = Number(meta.maxDrawdownLimit);
+    const rawDD = Number(account.trailingMaxDrawdown || 0);
+
     if (Number.isFinite(ddLimit) && ddLimit > 0) {
-      const currentDD = Math.abs(account.trailingMaxDrawdown || 0);
+      // Model 1: configured limit — trailingMaxDrawdown is cumulative loss (negative number)
+      const currentDD = Math.abs(rawDD);
       if (currentDD > 0) {
         const remaining = ddLimit - currentDD;
-        if (remaining <= 500) {
+        if (remaining <= 0) {
+          flags.push(makeFlag({
+            type: 'Drawdown breached',
+            severity: 'Critical',
+            accountName: account.accountName,
+            message: `${meta.alias} has exceeded its $${ddLimit.toLocaleString()} max drawdown limit. Account may be terminated.`,
+          }));
+        } else if (remaining <= 500) {
           flags.push(makeFlag({
             type: 'Drawdown near limit',
             severity: 'Critical',
             accountName: account.accountName,
-            message: `${meta.alias} is $${Math.max(0, Math.round(remaining))} from its $${ddLimit.toLocaleString()} max drawdown limit. Immediate action required.`,
+            message: `${meta.alias} is $${Math.round(remaining)} from its $${ddLimit.toLocaleString()} max drawdown limit. Immediate action required.`,
           }));
         } else if (remaining <= 1200) {
           flags.push(makeFlag({
@@ -189,6 +199,31 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
             message: `${meta.alias} has $${Math.round(remaining)} remaining before its $${ddLimit.toLocaleString()} max drawdown limit.`,
           }));
         }
+      }
+    } else if (rawDD !== 0) {
+      // Model 2: no configured limit — trailingMaxDrawdown IS the remaining buffer (sign-based)
+      // NT exports this as positive (buffer remaining); account dies when it hits 0 or goes negative
+      if (rawDD <= 0) {
+        flags.push(makeFlag({
+          type: 'Drawdown breached',
+          severity: 'Critical',
+          accountName: account.accountName,
+          message: `${meta.alias} trailing drawdown buffer is $${rawDD.toLocaleString()} — account limit reached or exceeded. Verify with prop firm immediately.`,
+        }));
+      } else if (rawDD <= 500) {
+        flags.push(makeFlag({
+          type: 'Drawdown near limit',
+          severity: 'Critical',
+          accountName: account.accountName,
+          message: `${meta.alias} has only $${Math.round(rawDD)} of trailing drawdown buffer remaining. Immediate action required.`,
+        }));
+      } else if (rawDD <= 1200) {
+        flags.push(makeFlag({
+          type: 'Drawdown approaching limit',
+          severity: 'Warning',
+          accountName: account.accountName,
+          message: `${meta.alias} has $${Math.round(rawDD)} of trailing drawdown buffer remaining.`,
+        }));
       }
     }
 
