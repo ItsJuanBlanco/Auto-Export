@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, FileText, RefreshCw, X } from 'lucide-react';
 import { formatCurrency, summarizeAccountRows } from '../domain/report';
 import { enrichStrategyWithSetMatch } from '../domain/xmlMatch';
+import { PAYOUT_STATES } from '../domain/reconcile';
 
 function Metric({ label, value, tone }) {
   return (
@@ -157,10 +158,22 @@ function AccountDetail({ row, executions, colSpan = 7 }) {
   );
 }
 
-function AccountTable({ title, rows, executions, mode }) {
+const PAYOUT_STATE_OPTIONS = Object.values(PAYOUT_STATES);
+
+function payoutStateTone(state) {
+  if (state === PAYOUT_STATES.PAYOUT_APPROVED || state === PAYOUT_STATES.CLEAR_TO_TRADE) return 'success';
+  if (state === PAYOUT_STATES.PAYOUT_REQUESTED) return 'warning';
+  if (state === PAYOUT_STATES.REQUEST_PAYOUT) return 'danger';
+  return 'muted';
+}
+
+function AccountTable({ title, rows, executions, mode, onUpdateAccount }) {
   const [expandedAccount, setExpandedAccount] = useState('');
   if (!rows.length) return null;
   const isCash = mode === 'cash';
+  const isFunded = title === 'Funded';
+  const colSpan = isCash ? 5 : isFunded ? 7 : 6;
+
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -178,6 +191,7 @@ function AccountTable({ title, rows, executions, mode }) {
               <th>Weekly PnL</th>
               {isCash ? <th>Cash balance</th> : null}
               {!isCash ? <th>Drawdown</th> : null}
+              {isFunded ? <th>Payout</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -185,7 +199,6 @@ function AccountTable({ title, rows, executions, mode }) {
               <Fragment key={row.accountName}>
                 <tr
                   className="clickable-row"
-                  key={row.accountName}
                   onClick={() => setExpandedAccount((current) => (current === row.accountName ? '' : row.accountName))}
                 >
                   <td>
@@ -204,8 +217,19 @@ function AccountTable({ title, rows, executions, mode }) {
                   <td className={row.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.weeklyPnl)}</td>
                   {isCash ? <td>{formatCurrency(row.accountBalance)}</td> : null}
                   {!isCash ? <td>{formatCurrency(row.trailingMaxDrawdown)}</td> : null}
+                  {isFunded ? (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select
+                        className={`payout-select payout-${payoutStateTone(row.meta?.payoutState)}`}
+                        value={row.meta?.payoutState || PAYOUT_STATES.NOT_REQUESTED}
+                        onChange={(e) => onUpdateAccount && onUpdateAccount(row.accountName, { payoutState: e.target.value })}
+                      >
+                        {PAYOUT_STATE_OPTIONS.map((opt) => <option key={opt}>{opt}</option>)}
+                      </select>
+                    </td>
+                  ) : null}
                 </tr>
-                {expandedAccount === row.accountName ? <AccountDetail row={row} executions={executions} colSpan={isCash ? 5 : 6} /> : null}
+                {expandedAccount === row.accountName ? <AccountDetail row={row} executions={executions} colSpan={colSpan} /> : null}
               </Fragment>
             ))}
           </tbody>
@@ -215,7 +239,7 @@ function AccountTable({ title, rows, executions, mode }) {
   );
 }
 
-export default function Dashboard({ dailyImport, rows = [], title, mode, onBuildReport, onRecalculate, onResolveFlag, strategySetRecords = [] }) {
+export default function Dashboard({ dailyImport, rows = [], title, mode, onBuildReport, onRecalculate, onResolveFlag, onUpdateAccount, strategySetRecords = [] }) {
   if (!dailyImport) {
     return (
       <div className="empty-state">
@@ -281,11 +305,11 @@ export default function Dashboard({ dailyImport, rows = [], title, mode, onBuild
 
       {title === 'Evaluations' ? (
         <>
-          <AccountTable title="Bullet Bot" rows={enrichedRows.filter((row) => row.meta?.accountType === 'Evaluation - Bullet Bot')} executions={dailyImport.executions || []} mode={mode} />
-          <AccountTable title="Standard Evaluations" rows={enrichedRows.filter((row) => row.meta?.accountType === 'Evaluation - Standard')} executions={dailyImport.executions || []} mode={mode} />
+          <AccountTable title="Bullet Bot" rows={enrichedRows.filter((row) => row.meta?.accountType === 'Evaluation - Bullet Bot')} executions={dailyImport.executions || []} mode={mode} onUpdateAccount={onUpdateAccount} />
+          <AccountTable title="Standard Evaluations" rows={enrichedRows.filter((row) => row.meta?.accountType === 'Evaluation - Standard')} executions={dailyImport.executions || []} mode={mode} onUpdateAccount={onUpdateAccount} />
         </>
       ) : (
-        <AccountTable title={title} rows={enrichedRows} executions={dailyImport.executions || []} mode={mode} />
+        <AccountTable title={title} rows={enrichedRows} executions={dailyImport.executions || []} mode={mode} onUpdateAccount={onUpdateAccount} />
       )}
     </div>
   );

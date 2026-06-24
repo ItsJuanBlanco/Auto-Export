@@ -1832,6 +1832,7 @@ export default function App() {
                     onBuildReport={() => setReportImport(dailyImport)}
                     onRecalculate={recalculateImport}
                     onResolveFlag={handleResolveFlag}
+                    onUpdateAccount={handleAccountUpdate}
                     strategySetRecords={strategySetIndex.records}
                   />
                   <section className="panel">
