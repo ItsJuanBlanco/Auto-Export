@@ -61,10 +61,15 @@ const STATIC_TABS = ['Activity', 'Tasks', 'Credentials & Notes', 'Price Checks']
 function deriveClientBadge(client) {
   const latest = client.dailyImports.at(-1);
   if (!latest) return { label: 'No data', tone: 'muted' };
-  const critical = latest.flags.filter((flag) => flag.severity === 'Critical').length;
+  const critical = latest.flags.filter((flag) => flag.severity === 'Critical' && flag.status !== 'Resolved').length;
   if (critical) return { label: `${critical} critical`, tone: 'danger' };
-  const open = latest.flags.length;
+  const open = latest.flags.filter((f) => f.status !== 'Resolved').length;
   if (open) return { label: `${open} flags`, tone: 'warning' };
+  const today = todayIsoDate();
+  const overdue = (client.tasks || []).filter((t) => !t.done && t.dueDate && t.dueDate < today).length;
+  if (overdue) return { label: `${overdue} overdue`, tone: 'warning' };
+  const openTasks = (client.tasks || []).filter((t) => !t.done).length;
+  if (openTasks) return { label: `${openTasks} tasks`, tone: 'muted' };
   return { label: latest.status || 'Ready', tone: 'success' };
 }
 
@@ -948,9 +953,10 @@ function ClientOverview({ client, dailyImport }) {
   );
 }
 
-function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus }) {
+function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '' }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
   const overview = buildCamOverview(clients, strategySetRecords);
+  const displayName = camName || 'this workspace';
 
   return (
     <main className="content">
@@ -958,7 +964,7 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
         <div>
           <span className="eyebrow">Account manager overview</span>
           <h1>CAM Overview</h1>
-          <p>Algorithm performance across Pedro's latest client closes.</p>
+          <p>Algorithm performance across {displayName}'s latest client closes.</p>
         </div>
       </div>
       <div className="metric-grid">
@@ -1313,15 +1319,127 @@ function CredentialsTab({ client, onUpdateClient }) {
   );
 }
 
-function PriceChecksTab() {
+const DEFAULT_PRICE_CHECK_ROWS = [
+  { id: 'pc-1', instrument: 'MNQ', checkTime: '09:00', connection: '', algos: '', notes: '', checked: false },
+  { id: 'pc-2', instrument: 'MES', checkTime: '10:00', connection: '', algos: '', notes: '', checked: false },
+];
+
+function PriceChecksTab({ client, onUpdateClient }) {
+  const checks = client.priceChecks?.length ? client.priceChecks : DEFAULT_PRICE_CHECK_ROWS;
+  const today = todayIsoDate();
+  const lastReset = client.priceChecksDate;
+
+  const activeChecks = lastReset === today
+    ? checks
+    : checks.map((r) => ({ ...r, checked: false }));
+
+  function save(rows) {
+    onUpdateClient({ priceChecks: rows, priceChecksDate: today });
+  }
+
+  function update(id, patch) {
+    save(activeChecks.map((r) => r.id === id ? { ...r, ...patch } : r));
+  }
+
+  function addRow() {
+    save([
+      ...activeChecks,
+      { id: `pc-${Date.now()}`, instrument: '', checkTime: '', connection: '', algos: '', notes: '', checked: false },
+    ]);
+  }
+
+  function removeRow(id) {
+    save(activeChecks.filter((r) => r.id !== id));
+  }
+
+  function resetAll() {
+    save(activeChecks.map((r) => ({ ...r, checked: false })));
+  }
+
+  const doneCount = activeChecks.filter((r) => r.checked).length;
+  const allDone = activeChecks.length > 0 && doneCount === activeChecks.length;
+
   return (
     <section className="panel">
-      <div className="panel-heading"><h3>Price Checks</h3><span className="badge muted">Lightweight MVP</span></div>
+      <div className="panel-heading">
+        <h3>Price Checks</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {allDone
+            ? <span className="badge success">All checked · {today}</span>
+            : <span className="badge muted">{doneCount}/{activeChecks.length} checked today</span>}
+          <button className="secondary-button" onClick={resetAll}>Reset</button>
+          <button className="secondary-button" onClick={addRow}><Plus size={14} /> Row</button>
+        </div>
+      </div>
       <div className="table-wrap">
         <table className="ops-table">
-          <thead><tr><th>Instrument</th><th>Time</th><th>Price</th><th>Connection</th><th>Algos</th><th>Notes</th></tr></thead>
+          <thead>
+            <tr>
+              <th style={{ width: 36 }}>✓</th>
+              <th>Instrument</th>
+              <th>Time</th>
+              <th>Connection</th>
+              <th>Algos</th>
+              <th>Notes</th>
+              <th style={{ width: 32 }}></th>
+            </tr>
+          </thead>
           <tbody>
-            <tr><td>MNQ</td><td>09:00 EST</td><td>Manual</td><td>CONNECTED</td><td>RUNNING</td><td>Use as hourly checklist in phase 2.</td></tr>
+            {activeChecks.map((row) => (
+              <tr key={row.id} className={row.checked ? 'pc-row-done' : ''}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={row.checked}
+                    onChange={(e) => update(row.id, { checked: e.target.checked })}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={row.instrument}
+                    placeholder="MNQ"
+                    style={{ width: '100%' }}
+                    onChange={(e) => update(row.id, { instrument: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={row.checkTime}
+                    placeholder="09:00"
+                    style={{ width: 72 }}
+                    onChange={(e) => update(row.id, { checkTime: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <select value={row.connection} onChange={(e) => update(row.id, { connection: e.target.value })} style={{ minWidth: 130 }}>
+                    <option value="">— not checked</option>
+                    <option value="Connected">Connected</option>
+                    <option value="Disconnected">Disconnected</option>
+                    <option value="Degraded">Degraded</option>
+                  </select>
+                </td>
+                <td>
+                  <select value={row.algos} onChange={(e) => update(row.id, { algos: e.target.value })} style={{ minWidth: 110 }}>
+                    <option value="">— not checked</option>
+                    <option value="Running">Running</option>
+                    <option value="Stopped">Stopped</option>
+                    <option value="N/A">N/A</option>
+                  </select>
+                </td>
+                <td>
+                  <input
+                    value={row.notes}
+                    placeholder="Optional note"
+                    style={{ width: '100%' }}
+                    onChange={(e) => update(row.id, { notes: e.target.value })}
+                  />
+                </td>
+                <td>
+                  <button className="ghost-button icon-only" onClick={() => removeRow(row.id)}><Trash2 size={13} /></button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -1577,6 +1695,7 @@ export default function App() {
           allClients={state.clients || []}
           strategySetRecords={strategySetIndex.records}
           strategySetIndexStatus={strategySetIndex.status}
+          camName={currentCamProfile?.name || ''}
         />
       ) : (
         <main className="content">
@@ -1614,7 +1733,7 @@ export default function App() {
               {effectiveActiveTab === 'Activity' ? <ActivityLog client={selectedClient} onAddEntry={handleAddActivity} onDeleteEntry={handleDeleteActivity} /> : null}
               {effectiveActiveTab === 'Tasks' ? <TasksTab client={selectedClient} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} /> : null}
               {effectiveActiveTab === 'Credentials & Notes' ? <CredentialsTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
-              {effectiveActiveTab === 'Price Checks' ? <PriceChecksTab /> : null}
+              {effectiveActiveTab === 'Price Checks' ? <PriceChecksTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
               {['Review', 'Evaluations', 'Funded', 'Cash'].includes(effectiveActiveTab) ? (
                 <>
                   <Dashboard

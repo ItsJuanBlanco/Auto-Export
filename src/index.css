@@ -1218,6 +1218,10 @@ textarea {
 .registry-table input[type="date"] { min-width: 120px; }
 .registry-table input[type="number"] { width: 80px; }
 
+/* Price checks */
+.pc-row-done td { opacity: 0.45; }
+.pc-row-done input, .pc-row-done select { text-decoration: line-through; }
+
 /* Lifecycle metrics grid — 3 cols so it fits the half-width panel */
 .lifecycle-grid {
   display: grid;
