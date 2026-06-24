@@ -1262,6 +1262,43 @@ textarea {
   color: var(--muted);
 }
 
+/* Risk distribution */
+.risk-dist-grid { display: grid; gap: 10px; }
+
+.risk-dist-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 32px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.risk-dist-label { font-size: 12px; font-weight: 700; }
+
+.risk-dist-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.risk-dist-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.risk-dist-row strong { font-size: 16px; text-align: right; }
+
+.risk-dist-names {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .exception-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(180px, 1fr));

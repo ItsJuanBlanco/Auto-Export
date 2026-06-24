@@ -413,6 +413,49 @@ function buildDisconnectAlerts(client) {
   return alerts;
 }
 
+function buildRiskDistribution(clients = [], camProfiles = []) {
+  const camById = Object.fromEntries(camProfiles.map((p) => [p.id, p]));
+  const clientCam = {};
+  for (const cam of camProfiles) {
+    for (const id of cam.clientIds || []) clientCam[id] = cam.id;
+  }
+
+  const buckets = { Critical: [], High: [], Medium: [], Low: [], Safe: [] };
+
+  for (const client of clients) {
+    const latest = client.dailyImports?.at(-1);
+    if (!latest) continue;
+    const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+    const camId = clientCam[client.id];
+    const camName = camById[camId]?.name || '—';
+
+    for (const snapshot of latest.snapshots || []) {
+      const meta = registry[snapshot.accountName] || {};
+      if (meta.accountType === 'Inactive / Ignore' || meta.accountType === 'Cash') continue;
+      if (['Inactive', 'Failed'].includes(meta.status)) continue;
+
+      const risk = accountRiskLevel(snapshot, meta);
+      const entry = {
+        alias: meta.alias || snapshot.accountName,
+        clientName: client.name,
+        camName,
+        drawdown: Number(snapshot.trailingMaxDrawdown || 0),
+        ddLimit: Number(meta.maxDrawdownLimit || 0),
+        pct: risk?.pct || 0,
+      };
+
+      if (risk?.level === 'Critical') buckets.Critical.push(entry);
+      else if (risk?.level === 'High') buckets.High.push(entry);
+      else if (risk?.level === 'Medium') buckets.Medium.push(entry);
+      else if (risk?.level === 'Low') buckets.Low.push(entry);
+      else buckets.Safe.push(entry);
+    }
+  }
+
+  const total = Object.values(buckets).reduce((s, b) => s + b.length, 0);
+  return { buckets, total };
+}
+
 function buildPayoutPipeline(clients = [], camProfiles = []) {
   const camById = Object.fromEntries(camProfiles.map((p) => [p.id, p]));
   const clientCam = {};
@@ -521,6 +564,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
 
   const strategies = buildStrategyAnalyzer(clients);
   const lifecycle = buildLifecycleMetrics(clients);
+  const riskDist = buildRiskDistribution(clients, camProfiles);
 
   function submitCam(event) {
     event.preventDefault();
@@ -637,6 +681,44 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             </div>
           </div>
         </section>
+
+        {riskDist.total > 0 ? (
+          <section className={riskDist.buckets.Critical.length ? 'panel danger-panel' : 'panel'}>
+            <div className="panel-heading">
+              <h3>Drawdown risk distribution</h3>
+              <span className="badge muted">{riskDist.total} accounts with DD config</span>
+            </div>
+            <div className="risk-dist-grid">
+              {[
+                { key: 'Critical', color: 'var(--red)', label: 'Critical ≥85%' },
+                { key: 'High',     color: '#f59e0b',   label: 'High 65–85%' },
+                { key: 'Medium',   color: 'var(--yellow)', label: 'Medium 40–65%' },
+                { key: 'Low',      color: 'var(--green)', label: 'Low <40%' },
+                { key: 'Safe',     color: 'var(--muted)', label: 'No limit set' },
+              ].map(({ key, color, label }) => {
+                const accounts = riskDist.buckets[key];
+                const pct = riskDist.total > 0 ? (accounts.length / riskDist.total) * 100 : 0;
+                return (
+                  <div className="risk-dist-row" key={key}>
+                    <span className="risk-dist-label" style={{ color }}>{label}</span>
+                    <div className="risk-dist-bar">
+                      <i style={{ width: `${pct}%`, background: color }} />
+                    </div>
+                    <strong style={{ color: accounts.length && key === 'Critical' ? color : undefined }}>
+                      {accounts.length}
+                    </strong>
+                    {accounts.length ? (
+                      <span className="risk-dist-names">
+                        {accounts.slice(0, 4).map((a) => `${a.alias} (${a.clientName})`).join(' · ')}
+                        {accounts.length > 4 ? ` +${accounts.length - 4} more` : ''}
+                      </span>
+                    ) : <span className="risk-dist-names muted">—</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         <section className="panel">
           <div className="panel-heading"><h3>Exception rules</h3><span className="badge muted">Auto-detected flags</span></div>
