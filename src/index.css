@@ -722,6 +722,14 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 }
 
 /* Inline payout state select */
+/* Target progress cell */
+.target-cell { min-width: 110px; }
+.target-progress { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.target-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.target-bar i { display: block; height: 100%; border-radius: 3px; min-width: 2px; transition: width 0.3s ease; }
+.target-progress small { font-size: 11px; font-weight: 700; width: 32px; text-align: right; }
+.target-cell > small { font-size: 10px; }
+
 .payout-select {
   font-size: 12px;
   font-weight: 600;

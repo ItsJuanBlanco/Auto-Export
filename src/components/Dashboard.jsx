@@ -172,7 +172,7 @@ function AccountTable({ title, rows, executions, mode, onUpdateAccount }) {
   if (!rows.length) return null;
   const isCash = mode === 'cash';
   const isFunded = title === 'Funded';
-  const colSpan = isCash ? 5 : isFunded ? 7 : 6;
+  const colSpan = isCash ? 5 : isFunded ? 8 : 6;
 
   return (
     <section className="panel">
@@ -191,6 +191,7 @@ function AccountTable({ title, rows, executions, mode, onUpdateAccount }) {
               <th>Weekly PnL</th>
               {isCash ? <th>Cash balance</th> : null}
               {!isCash ? <th>Drawdown</th> : null}
+              {isFunded ? <th>Target</th> : null}
               {isFunded ? <th>Payout</th> : null}
             </tr>
           </thead>
@@ -217,6 +218,24 @@ function AccountTable({ title, rows, executions, mode, onUpdateAccount }) {
                   <td className={row.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.weeklyPnl)}</td>
                   {isCash ? <td>{formatCurrency(row.accountBalance)}</td> : null}
                   {!isCash ? <td>{formatCurrency(row.trailingMaxDrawdown)}</td> : null}
+                  {isFunded ? (() => {
+                    const target = Number(row.meta?.targetProfit || 0);
+                    const balance = Number(row.accountBalance || 0);
+                    if (!target) return <td className="muted" onClick={(e) => e.stopPropagation()}>—</td>;
+                    const pct = Math.min(100, Math.round((balance / target) * 100));
+                    const reached = balance >= target;
+                    return (
+                      <td className="target-cell" onClick={(e) => e.stopPropagation()}>
+                        <div className="target-progress">
+                          <div className="target-bar">
+                            <i style={{ width: `${pct}%`, background: reached ? 'var(--green)' : pct >= 80 ? '#f59e0b' : 'var(--accent)' }} />
+                          </div>
+                          <small className={reached ? 'positive' : ''}>{pct}%</small>
+                        </div>
+                        <small className="muted">{formatCurrency(balance)} / {formatCurrency(target)}</small>
+                      </td>
+                    );
+                  })() : null}
                   {isFunded ? (
                     <td onClick={(e) => e.stopPropagation()}>
                       <select
