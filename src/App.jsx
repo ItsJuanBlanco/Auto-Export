@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -11,6 +11,7 @@ import {
   Lock,
   LogOut,
   Plus,
+  RefreshCw,
   Shield,
   Trash2,
   TrendingUp,
@@ -1858,6 +1859,7 @@ const DEFAULT_PRICE_CHECK_ROWS = [
 ];
 
 function PriceChecksTab({ client, onUpdateClient }) {
+  const nextRowId = useRef((client.priceChecks?.length || DEFAULT_PRICE_CHECK_ROWS.length) + 1);
   const checks = client.priceChecks?.length ? client.priceChecks : DEFAULT_PRICE_CHECK_ROWS;
   const today = todayIsoDate();
   const lastReset = client.priceChecksDate;
@@ -1875,9 +1877,11 @@ function PriceChecksTab({ client, onUpdateClient }) {
   }
 
   function addRow() {
+    const id = `pc-custom-${nextRowId.current}`;
+    nextRowId.current += 1;
     save([
       ...activeChecks,
-      { id: `pc-${Date.now()}`, instrument: '', checkTime: '', connection: '', algos: '', notes: '', checked: false },
+      { id, instrument: '', checkTime: '', connection: '', algos: '', notes: '', checked: false },
     ]);
   }
 
@@ -2122,7 +2126,18 @@ export default function App() {
 
   function closeImport() {
     if (!selectedClient || !dailyImport) return;
+    const flags = (dailyImport.flags || []).filter((f) => f.severity === 'Critical' && f.status !== 'Resolved');
+    const msg = flags.length
+      ? `This close has ${flags.length} unresolved critical flag${flags.length > 1 ? 's' : ''}. Close anyway?`
+      : 'Mark this day as closed? This locks the close record.';
+    if (!window.confirm(msg)) return;
     setState((current) => updateImportStatus(current, selectedClient.id, dailyImport.id, 'Closed'));
+  }
+
+  function reopenImport() {
+    if (!selectedClient || !dailyImport) return;
+    if (!window.confirm('Reopen this day? The close will return to "Needs review" status.')) return;
+    setState((current) => updateImportStatus(current, selectedClient.id, dailyImport.id, 'Needs review'));
   }
 
   function recalculateImport() {
@@ -2283,7 +2298,10 @@ export default function App() {
                   <label className="date-control"><CalendarDays size={16} /><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} /></label>
                   <button className="secondary-button" onClick={() => setShowUpload((value) => !value)}><Upload size={16} /> Upload Daily Files</button>
                   <button className="primary-button" disabled={!dailyImport} onClick={() => setReportImport(dailyImport)}><FileText size={16} /> Build Daily Report</button>
-                  <button className="ghost-button" disabled={!dailyImport} onClick={closeImport}><CheckCircle2 size={16} /> Close Day</button>
+                  {dailyImport?.status === 'Closed'
+                    ? <button className="ghost-button" onClick={reopenImport}><RefreshCw size={16} /> Reopen Day</button>
+                    : <button className="ghost-button" disabled={!dailyImport} onClick={closeImport}><CheckCircle2 size={16} /> Close Day</button>}
+
                 </div>
               </div>
 
