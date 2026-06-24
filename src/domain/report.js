@@ -51,20 +51,36 @@ export function buildDailyReportSummary(client, dailyImport) {
   const allVisible = [...grouped.evaluations, ...grouped.funded, ...grouped.cash];
   const { totals } = summarizeAccountRows(allVisible);
 
+  const openFlags = (dailyImport?.flags || []).filter((f) => f.status !== 'Resolved');
+  const criticalFlags = openFlags.filter((f) => f.severity === 'Critical');
+
+  // Prior close for delta
+  const imports = client?.dailyImports || [];
+  const currentIdx = imports.findIndex((d) => d.date === dailyImport?.date);
+  const priorImport = currentIdx > 0 ? imports[currentIdx - 1] : null;
+  const priorDailyPnl = priorImport
+    ? (priorImport.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0)
+    : null;
+
   return {
     clientName: client?.name || 'Client',
+    camName: '',
     date: dailyImport?.date || '',
     status: dailyImport?.status || 'No data',
     generatedAt: new Date().toISOString(),
     grouped,
     totals,
+    priorDailyPnl,
     flags: dailyImport?.flags || [],
+    openFlags,
+    criticalFlags,
     counts: {
       accounts: allVisible.length,
       evaluations: grouped.evaluations.length,
       funded: grouped.funded.length,
       cash: grouped.cash.length,
-      openFlags: (dailyImport?.flags || []).filter((flag) => flag.status === 'Open').length,
+      openFlags: openFlags.length,
+      criticalFlags: criticalFlags.length,
     },
   };
 }

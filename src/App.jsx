@@ -898,6 +898,41 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
 
 function ReportPanel({ client, dailyImport, onClose }) {
   const report = buildDailyReportSummary(client, dailyImport);
+  const dailyDelta = report.priorDailyPnl !== null
+    ? report.totals.grossRealizedPnl - report.priorDailyPnl
+    : null;
+
+  function drawdownLabel(row) {
+    const ddLimit = Number(row.meta?.maxDrawdownLimit);
+    const rawDD = Number(row.trailingMaxDrawdown || 0);
+    if (Number.isFinite(ddLimit) && ddLimit > 0) {
+      const remaining = ddLimit - Math.abs(rawDD);
+      const pct = Math.round((Math.abs(rawDD) / ddLimit) * 100);
+      return `${formatCurrency(remaining)} remaining (${pct}% used)`;
+    }
+    if (rawDD !== 0) {
+      return rawDD <= 0 ? 'BREACHED' : `${formatCurrency(rawDD)} buffer`;
+    }
+    return '—';
+  }
+
+  function drawdownTone(row) {
+    const ddLimit = Number(row.meta?.maxDrawdownLimit);
+    const rawDD = Number(row.trailingMaxDrawdown || 0);
+    if (Number.isFinite(ddLimit) && ddLimit > 0) {
+      const remaining = ddLimit - Math.abs(rawDD);
+      if (remaining <= 500) return 'report-dd-critical';
+      if (remaining <= 1200) return 'report-dd-warning';
+    } else if (rawDD !== 0) {
+      if (rawDD <= 0) return 'report-dd-critical';
+      if (rawDD <= 500) return 'report-dd-critical';
+      if (rawDD <= 1200) return 'report-dd-warning';
+    }
+    return '';
+  }
+
+  const GROUP_LABELS = { evaluations: 'Evaluations', funded: 'Funded Accounts', cash: 'Cash Accounts' };
+
   return (
     <div className="report-overlay">
       <div className="report-sheet">
@@ -905,38 +940,111 @@ function ReportPanel({ client, dailyImport, onClose }) {
           <button className="secondary-button" onClick={() => window.print()}>Print / Save PDF</button>
           <button className="ghost-button" onClick={onClose}>Close</button>
         </div>
+
         <header className="report-header">
           <div>
-            <p>Vincere Trading</p>
+            <p className="report-firm">Vincere Trading</p>
             <h1>{report.clientName}</h1>
             <span>Daily close report · {report.date}</span>
           </div>
-          <strong>{report.status}</strong>
+          <div className="report-header-right">
+            <strong className={report.counts.criticalFlags > 0 ? 'report-status-critical' : ''}>{report.status}</strong>
+            {report.counts.criticalFlags > 0 ? <span className="report-flag-badge">{report.counts.criticalFlags} critical</span> : null}
+          </div>
         </header>
+
         <section className="report-metrics">
-          <div><span>Accounts</span><strong>{report.counts.accounts}</strong></div>
-          <div><span>Daily/Gross PnL</span><strong>{formatCurrency(report.totals.grossRealizedPnl)}</strong></div>
-          <div><span>Weekly PnL</span><strong>{formatCurrency(report.totals.weeklyPnl)}</strong></div>
+          <div>
+            <span>Accounts</span>
+            <strong>{report.counts.accounts}</strong>
+          </div>
+          <div>
+            <span>Daily / Gross PnL</span>
+            <strong className={report.totals.grossRealizedPnl >= 0 ? 'report-positive' : 'report-negative'}>
+              {formatCurrency(report.totals.grossRealizedPnl)}
+            </strong>
+          </div>
+          <div>
+            <span>Weekly PnL</span>
+            <strong className={report.totals.weeklyPnl >= 0 ? 'report-positive' : 'report-negative'}>
+              {formatCurrency(report.totals.weeklyPnl)}
+            </strong>
+          </div>
+          {dailyDelta !== null ? (
+            <div>
+              <span>vs prior close</span>
+              <strong className={dailyDelta >= 0 ? 'report-positive' : 'report-negative'}>
+                {dailyDelta >= 0 ? '+' : ''}{formatCurrency(dailyDelta)}
+              </strong>
+            </div>
+          ) : null}
+          <div>
+            <span>Open flags</span>
+            <strong className={report.counts.openFlags > 0 ? 'report-negative' : ''}>
+              {report.counts.openFlags}
+            </strong>
+          </div>
         </section>
+
         {['evaluations', 'funded', 'cash'].map((group) => report.grouped[group].length ? (
           <section className="report-section" key={group}>
-            <h2>{group === 'cash' ? 'Cash Accounts' : group}</h2>
-            <div className={group === 'cash' ? 'report-row report-row-head cash' : 'report-row report-row-head'}>
-              <strong>Account</strong>
-              <span>Status</span>
-              <span>Daily PnL</span>
-              {group === 'cash' ? <span>Cash balance</span> : null}
-            </div>
-            {report.grouped[group].map((row) => (
-              <div className={group === 'cash' ? 'report-row cash' : 'report-row'} key={row.accountName}>
-                <strong>{row.meta?.alias || row.accountName}</strong>
-                <span>{row.meta?.status || 'Active'}</span>
-                <span>{formatCurrency(row.grossRealizedPnl)}</span>
-                {group === 'cash' ? <span>{formatCurrency(row.accountBalance)}</span> : null}
-              </div>
-            ))}
+            <h2>{GROUP_LABELS[group]}</h2>
+            <table className="report-table">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Status</th>
+                  <th>Strategies</th>
+                  <th>Daily PnL</th>
+                  <th>Weekly PnL</th>
+                  {group !== 'cash' ? <th>Drawdown</th> : null}
+                  {group === 'cash' ? <th>Balance</th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {report.grouped[group].map((row) => {
+                  const stratNames = (row.strategies || []).map((s) =>
+                    `${s.strategyName || s.strategyFamily || 'Strategy'}${s.enabled ? '' : ' (off)'}`
+                  ).join(', ') || '—';
+                  return (
+                    <tr key={row.accountName}>
+                      <td><strong>{row.meta?.alias || row.accountName}</strong><br /><small>{row.meta?.connection || row.connection || ''}</small></td>
+                      <td>{row.meta?.status || 'Active'}</td>
+                      <td><small>{stratNames}</small></td>
+                      <td className={row.grossRealizedPnl >= 0 ? 'report-positive' : 'report-negative'}>{formatCurrency(row.grossRealizedPnl)}</td>
+                      <td className={row.weeklyPnl >= 0 ? 'report-positive' : 'report-negative'}>{formatCurrency(row.weeklyPnl)}</td>
+                      {group !== 'cash' ? <td className={drawdownTone(row)}>{drawdownLabel(row)}</td> : null}
+                      {group === 'cash' ? <td>{formatCurrency(row.accountBalance)}</td> : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </section>
         ) : null)}
+
+        {report.openFlags.length > 0 ? (
+          <section className="report-section">
+            <h2>Open flags</h2>
+            <div className="report-flags">
+              {report.openFlags.map((flag) => (
+                <div key={flag.id} className={`report-flag-row report-flag-${flag.severity?.toLowerCase()}`}>
+                  <strong>{flag.severity} · {flag.type}</strong>
+                  <span>{flag.message}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="report-section">
+            <p className="report-ok">✓ No open flags for this close.</p>
+          </section>
+        )}
+
+        <footer className="report-footer">
+          <span>Generated {new Date(report.generatedAt).toLocaleString('en-US')}</span>
+          <span>Vincere Trading · Confidential</span>
+        </footer>
       </div>
     </div>
   );

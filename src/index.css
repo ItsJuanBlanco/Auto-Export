@@ -969,9 +969,35 @@ textarea {
   padding: 10px 0;
 }
 
-.report-row.cash {
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-}
+.report-row.cash { grid-template-columns: 2fr 1fr 1fr 1fr; }
+
+/* Report table */
+.report-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.report-table th { text-align: left; padding: 6px 10px; border-bottom: 2px solid #e2e8f0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+.report-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.report-table tr:last-child td { border-bottom: none; }
+.report-table small { font-size: 11px; color: #94a3b8; }
+
+.report-positive { color: #16a34a; font-weight: 600; }
+.report-negative { color: #dc2626; font-weight: 600; }
+.report-dd-critical { color: #dc2626; font-weight: 600; }
+.report-dd-warning { color: #d97706; font-weight: 600; }
+
+.report-firm { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin: 0 0 4px; }
+.report-header-right { text-align: right; }
+.report-status-critical { color: #dc2626; }
+.report-flag-badge { display: inline-block; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 4px; font-size: 11px; padding: 2px 7px; margin-top: 4px; }
+
+.report-flags { display: flex; flex-direction: column; gap: 8px; }
+.report-flag-row { padding: 10px 12px; border-left: 3px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; gap: 4px; }
+.report-flag-row.report-flag-critical { border-left-color: #dc2626; background: #fef2f2; }
+.report-flag-row.report-flag-warning { border-left-color: #d97706; background: #fffbeb; }
+.report-flag-row strong { font-size: 12px; }
+.report-flag-row span { font-size: 13px; }
+
+.report-ok { color: #16a34a; font-weight: 600; margin: 8px 0 0; }
+
+.report-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
 
 .login-screen {
   min-height: 100vh;
