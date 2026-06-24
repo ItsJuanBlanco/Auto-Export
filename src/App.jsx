@@ -8,7 +8,11 @@ import {
   Download,
   FileText,
   Lock,
+  LogOut,
   Plus,
+  Shield,
+  Trash2,
+  TrendingUp,
   Upload,
   Users,
 } from 'lucide-react';
@@ -36,6 +40,14 @@ import {
 import { buildCamOverview } from './domain/camOverview';
 import { recalculateDailyImport, reconcileDailyImport } from './domain/reconcile';
 import { buildDailyReportSummary, formatCurrency } from './domain/report';
+import {
+  USER_ROLES,
+  addUser,
+  authenticateUser,
+  deleteUser,
+  loadUsers,
+  saveUsers,
+} from './domain/userStore';
 
 const STATIC_TABS = ['Credentials & Notes', 'Price Checks'];
 
@@ -228,6 +240,90 @@ function buildClientOverview(client, dailyImport) {
   };
 }
 
+function buildMonthlyTotals(client) {
+  const byMonth = {};
+  for (const di of client.dailyImports || []) {
+    const month = di.date.slice(0, 7);
+    if (!byMonth[month]) byMonth[month] = { month, monthlyPnl: 0, closedDays: 0, accounts: 0 };
+    const snapshots = di.snapshots || [];
+    byMonth[month].monthlyPnl += snapshots.reduce((t, s) => t + Number(s.grossRealizedPnl || 0), 0);
+    byMonth[month].closedDays += 1;
+    byMonth[month].accounts = Math.max(byMonth[month].accounts, snapshots.length);
+  }
+  return Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
+}
+
+function buildStrategyAnalyzer(clients = []) {
+  const stratMap = new Map();
+  for (const client of clients) {
+    const latest = client.dailyImports?.at(-1);
+    if (!latest) continue;
+    for (const snapshot of latest.snapshots || []) {
+      const enabledCount = (snapshot.strategies || []).filter((s) => s.enabled).length || 1;
+      for (const strategy of snapshot.strategies || []) {
+        const key = strategy.strategyFamily || strategy.strategyName || 'Unknown';
+        const entry = stratMap.get(key) || { name: key, count: 0, totalRealized: 0, totalWeekly: 0, accountSet: new Set() };
+        entry.count += 1;
+        entry.totalRealized += Number(strategy.realized || 0);
+        entry.totalWeekly += Number(snapshot.weeklyPnl || 0) / enabledCount;
+        entry.accountSet.add(snapshot.accountName);
+        stratMap.set(key, entry);
+      }
+    }
+  }
+  const entries = [...stratMap.values()];
+  const maxAbs = Math.max(...entries.map((e) => Math.abs(e.totalRealized)), 1);
+  return entries.map((e) => ({
+    name: e.name,
+    count: e.count,
+    accounts: e.accountSet.size,
+    totalRealized: e.totalRealized,
+    avgDaily: e.count ? e.totalRealized / e.count : 0,
+    avgWeekly: e.accountSet.size ? e.totalWeekly / e.accountSet.size : 0,
+    score: Math.max(0, Math.min(10, ((e.totalRealized + maxAbs) / (2 * maxAbs)) * 10)).toFixed(1),
+  })).sort((a, b) => b.totalRealized - a.totalRealized);
+}
+
+function buildLifecycleMetrics(clients = []) {
+  const evalFails = [];
+  const evalFunded = [];
+  const fundedPayouts = [];
+  let totalEvals = 0;
+  let totalFunded = 0;
+
+  for (const client of clients) {
+    for (const meta of Object.values(client.accountRegistry || {})) {
+      if (meta.accountType?.startsWith('Evaluation') || meta.accountType === 'Unassigned') {
+        totalEvals += 1;
+        if (meta.dateAdded && meta.dateFailed) {
+          const days = (new Date(meta.dateFailed) - new Date(meta.dateAdded)) / 86400000;
+          if (days >= 0) evalFails.push(days);
+        }
+        if (meta.dateAdded && meta.dateFunded) {
+          const days = (new Date(meta.dateFunded) - new Date(meta.dateAdded)) / 86400000;
+          if (days >= 0) evalFunded.push(days);
+        }
+      }
+      if (meta.accountType === 'Funded') {
+        totalFunded += 1;
+        if (meta.dateFunded && meta.dateLastPayout) {
+          const days = (new Date(meta.dateLastPayout) - new Date(meta.dateFunded)) / 86400000;
+          if (days >= 0) fundedPayouts.push(days);
+        }
+      }
+    }
+  }
+
+  const avg = (arr) => (arr.length ? (arr.reduce((s, v) => s + v, 0) / arr.length).toFixed(1) : 'N/A');
+  return {
+    totalEvals,
+    totalFunded,
+    avgDaysToFail: avg(evalFails),
+    avgDaysToFunded: avg(evalFunded),
+    avgDaysToPayout: avg(fundedPayouts),
+  };
+}
+
 function clientsForCam(clients = [], camProfile = null) {
   const clientIds = camProfile?.clientIds || [];
   if (!clientIds.length) return [];
@@ -235,40 +331,67 @@ function clientsForCam(clients = [], camProfile = null) {
   return clients.filter((client) => allowed.has(client.id));
 }
 
-function LoginScreen({ onLogin }) {
-  const [username, setUsername] = useState('manager');
-  const [password, setPassword] = useState('demo');
+function LoginScreen({ onLogin, users }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   function submit(event) {
     event.preventDefault();
-    onLogin({ username, role: username.toLowerCase().includes('cam') ? 'CAM' : 'Manager' });
+    const user = authenticateUser(username, password, users);
+    if (!user) {
+      setError('Invalid username or password.');
+      return;
+    }
+    setError('');
+    onLogin(user);
   }
 
   return (
     <main className="login-screen">
       <section className="login-panel">
         <span className="eyebrow">Vincere Trading</span>
-        <h1>Client Account Manager CRM</h1>
-        <p>Demo access layer for manager and CAM workspaces.</p>
+        <h1>CAM CRM</h1>
+        <p>Client Account Manager platform. Sign in to continue.</p>
         <form onSubmit={submit} className="login-form">
-          <label>Username<input value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-          <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+          <label>
+            Username
+            <input
+              value={username}
+              autoComplete="username"
+              onChange={(event) => { setUsername(event.target.value); setError(''); }}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              autoComplete="current-password"
+              onChange={(event) => { setPassword(event.target.value); setError(''); }}
+            />
+          </label>
+          {error ? <p className="auth-error">{error}</p> : null}
           <button className="primary-button">Sign in</button>
         </form>
-        <small>Demo only: any username/password continues. Use "manager" to start at the executive overview.</small>
+        <div className="login-hints">
+          <small><strong>Manager:</strong> manager / demo</small>
+          <small><strong>CAM:</strong> pedro / pedro123 · amanda / amanda123</small>
+        </div>
       </section>
     </main>
   );
 }
 
-function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam }) {
+function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onLogout, users = [], onUsersChange, session }) {
   const [newCamName, setNewCamName] = useState('');
+  const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', role: USER_ROLES.CAM, camProfileId: '' });
+  const [showUserPanel, setShowUserPanel] = useState(false);
   const teamHistory = buildTeamHistory(clients);
   const cams = (camProfiles.length ? camProfiles : createDemoState().camProfiles).map((profile) => {
     const summary = buildManagerSummary(clientsForCam(clients, profile));
     return { ...profile, ...summary, flags: summary.openFlags };
   });
-  const allAlgorithms = buildManagerSummary(clients).algorithms;
   const totals = cams.reduce((acc, cam) => ({
     clients: acc.clients + cam.clients,
     accounts: acc.accounts + cam.accounts,
@@ -277,10 +400,20 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     flags: acc.flags + cam.flags,
   }), { clients: 0, accounts: 0, weeklyPnl: 0, dailyPnl: 0, flags: 0 });
 
+  const strategies = buildStrategyAnalyzer(clients);
+  const lifecycle = buildLifecycleMetrics(clients);
+
   function submitCam(event) {
     event.preventDefault();
     onCreateCam(newCamName);
     setNewCamName('');
+  }
+
+  function submitNewUser(event) {
+    event.preventDefault();
+    if (!newUser.username || !newUser.password || !newUser.displayName) return;
+    onUsersChange(addUser(users, newUser));
+    setNewUser({ username: '', password: '', displayName: '', role: USER_ROLES.CAM, camProfileId: '' });
   }
 
   return (
@@ -288,24 +421,32 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
       <aside className="manager-sidebar">
         <span className="eyebrow">Platform</span>
         <strong>Vincere CRM</strong>
-        <button className="client-link active"><Users size={16} /><span>Manager Overview</span><em>Demo</em></button>
+        <button className="client-link active"><Users size={16} /><span>Operations</span><em>Live</em></button>
         {(camProfiles.length ? camProfiles : cams).map((cam) => (
           <button className="client-link" key={cam.id} onClick={() => onOpenCam(cam.id)}>
             <BarChart3 size={16} />
-            <span>{cam.name} CAM</span>
-            <em>{cam.status || 'Live'}</em>
+            <span>{cam.name}</span>
+            <em>{cam.status || 'Active'}</em>
           </button>
         ))}
+        <div className="manager-sidebar-footer">
+          <button className="client-link" onClick={() => setShowUserPanel((v) => !v)}>
+            <Shield size={16} /><span>Users & Access</span>
+          </button>
+          <button className="client-link" onClick={onLogout}>
+            <LogOut size={16} /><span>Sign out</span>
+          </button>
+        </div>
       </aside>
       <section className="content">
         <div className="page-header">
           <div>
-            <span className="eyebrow">Manager overview</span>
+            <span className="eyebrow">Manager overview · {session?.displayName || 'Manager'}</span>
             <h1>Operations Command Center</h1>
-            <p>Team-level analytics adapted from the master spreadsheet: accounts, strategy performance, lifecycle and flags.</p>
+            <p>Team-level analytics: accounts, strategy performance, lifecycle and flags.</p>
           </div>
           <div className="header-actions">
-            <button className="secondary-button" onClick={onLoadDemo}><Download size={16} /> Reload Demo Data</button>
+            <button className="secondary-button" onClick={onLoadDemo}><Download size={16} /> Reload Demo</button>
             <button className="primary-button" onClick={() => onOpenCam('am-pedro')}><BarChart3 size={16} /> Open Pedro Workspace</button>
           </div>
         </div>
@@ -314,22 +455,17 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           <div className="metric"><span>CAMs</span><strong>{cams.length}</strong></div>
           <div className="metric"><span>Clients</span><strong>{totals.clients}</strong></div>
           <div className="metric"><span>Accounts</span><strong>{totals.accounts}</strong></div>
-          <div className="metric"><span>Open flags</span><strong>{totals.flags}</strong></div>
-        </div>
-
-        <div className="metric-grid">
+          <div className="metric"><span>Open flags</span><strong className={totals.flags ? 'negative' : ''}>{totals.flags}</strong></div>
           <div className="metric"><span>Team daily PnL</span><strong className={totals.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(totals.dailyPnl)}</strong></div>
           <div className="metric"><span>Team weekly PnL</span><strong className={totals.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(totals.weeklyPnl)}</strong></div>
-          <div className="metric"><span>Running algorithms</span><strong>{Math.max(allAlgorithms, 8)}</strong></div>
-          <div className="metric"><span>Excel analytics</span><strong>Mapped</strong></div>
         </div>
 
         <section className="panel">
           <div className="panel-heading">
-            <h3>Client account managers</h3>
+            <h3>Account managers</h3>
             <form className="inline-create-form" onSubmit={submitCam}>
               <input value={newCamName} placeholder="New CAM name" onChange={(event) => setNewCamName(event.target.value)} />
-              <button className="secondary-button"><Plus size={14} /> Create CAM</button>
+              <button className="secondary-button"><Plus size={14} /> Create</button>
             </form>
           </div>
           <div className="cam-card-grid">
@@ -345,13 +481,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
         </section>
 
         <section className="panel">
-          <div className="panel-heading"><h3>7-day trading backlog</h3><span className="badge muted">Historical closes</span></div>
+          <div className="panel-heading"><h3>7-day team history</h3><span className="badge muted">Historical closes</span></div>
           <div className="history-strip">
             {teamHistory.map((day) => (
               <div className="history-day" key={day.date}>
                 <span>{day.date.slice(5)}</span>
                 <strong className={day.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(day.dailyPnl)}</strong>
-                <small>{day.accounts} accounts · weekly {formatCurrency(day.weeklyPnl)}</small>
+                <small>{day.accounts} acc · {formatCurrency(day.weeklyPnl)} weekly</small>
               </div>
             ))}
           </div>
@@ -359,58 +495,98 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
 
         <section className="overview-grid">
           <div className="panel">
-            <div className="panel-heading"><h3>Strategy analyzer</h3><span className="count">Score 0-10</span></div>
+            <div className="panel-heading"><h3>Strategy analyzer</h3><span className="count">Score 0–10</span></div>
             <div className="strategy-rank-list">
-              {[
-                ['RBO_PF', 8.7, 1240],
-                ['IFSP', 7.9, 980],
-                ['OGX_PF', 6.8, 420],
-                ['Bullet Bot', 5.9, 0],
-              ].map(([name, score, weekly]) => (
-                <div className="rank-row" key={name}>
-                  <strong>{name}</strong>
-                  <span>{score}/10</span>
-                  <em className={weekly >= 0 ? 'positive' : 'negative'}>{formatCurrency(weekly)}</em>
+              {strategies.length ? strategies.map((s) => (
+                <div className="rank-row" key={s.name}>
+                  <strong>{s.name}</strong>
+                  <small>{s.count} instances · {s.accounts} accts</small>
+                  <span>{s.score}/10</span>
+                  <em className={s.avgDaily >= 0 ? 'positive' : 'negative'}>{formatCurrency(s.avgDaily)} avg daily</em>
                 </div>
-              ))}
+              )) : <p className="muted">No strategy data in latest closes.</p>}
             </div>
           </div>
           <div className="panel">
-            <div className="panel-heading"><h3>Lifecycle metrics</h3><span className="badge muted">From Excel model</span></div>
+            <div className="panel-heading"><h3>Lifecycle metrics</h3><span className="badge muted">Account history</span></div>
             <div className="lifecycle-grid">
-              <div><span>Total evaluations</span><strong>128</strong></div>
-              <div><span>Avg days to fail</span><strong>5.4</strong></div>
-              <div><span>Avg days to funded</span><strong>12.1</strong></div>
-              <div><span>Avg days to payout</span><strong>18.7</strong></div>
+              <div><span>Total evaluations</span><strong>{lifecycle.totalEvals}</strong></div>
+              <div><span>Total funded</span><strong>{lifecycle.totalFunded}</strong></div>
+              <div><span>Avg days to fail</span><strong>{lifecycle.avgDaysToFail}</strong></div>
+              <div><span>Avg days to funded</span><strong>{lifecycle.avgDaysToFunded}</strong></div>
+              <div><span>Avg days to payout</span><strong>{lifecycle.avgDaysToPayout}</strong></div>
             </div>
           </div>
         </section>
 
         <section className="panel">
-          <div className="panel-heading"><h3>Exception logic</h3><span className="badge muted">Explainable flags</span></div>
+          <div className="panel-heading"><h3>Exception rules</h3><span className="badge muted">Auto-detected flags</span></div>
           <div className="exception-grid">
             <div className="exception-card critical">
-              <strong>Payout hold violation</strong>
-              <span>Triggered when account status is `Payout Hold` and the latest close still has one or more enabled strategies.</span>
-              <small>Formula: payout_hold && enabled_strategies &gt; 0</small>
+              <strong>Drawdown near limit</strong>
+              <span>Account has less than $500 remaining before its max drawdown limit.</span>
+              <small>balance_dd_remaining &lt; 500</small>
             </div>
             <div className="exception-card critical">
-              <strong>Unexpected strategy active</strong>
-              <span>Triggered when an inactive, reserve, or failed account is still running an enabled strategy.</span>
-              <small>Formula: status in [Inactive, Reserve, Failed] && enabled_strategies &gt; 0</small>
+              <strong>Payout hold violation</strong>
+              <span>Account in payout hold still has an enabled strategy.</span>
+              <small>status = Payout Hold &amp;&amp; enabled_strategies &gt; 0</small>
             </div>
             <div className="exception-card warning">
-              <strong>Unassigned account</strong>
-              <span>Triggered when a new imported account has not been manually classified as Evaluation, Funded, Cash, Bullet Bot, or Ignore.</span>
-              <small>Formula: account_type = Unassigned</small>
+              <strong>Payout eligible</strong>
+              <span>Funded account balance reached or exceeded target profit and payout not yet requested.</span>
+              <small>balance &ge; target_profit &amp;&amp; payout = Not requested</small>
             </div>
             <div className="exception-card warning">
-              <strong>Strategy deviation</strong>
-              <span>Triggered when an algorithm instance performs materially worse than peers running the same family/version, or when executions move opposite to peers trading the same instrument.</span>
-              <small>Formula: realized_pnl &lt; peer_mean - 1.5 * peer_stdev OR execution_direction != peer_majority_direction</small>
+              <strong>Drawdown approaching</strong>
+              <span>Account has less than $1,200 remaining before its max drawdown limit.</span>
+              <small>balance_dd_remaining &lt; 1200</small>
             </div>
           </div>
         </section>
+
+        {showUserPanel ? (
+          <section className="panel">
+            <div className="panel-heading"><h3>Users &amp; Access</h3><Shield size={16} /></div>
+            <div className="table-wrap">
+              <table className="ops-table">
+                <thead><tr><th>Display name</th><th>Username</th><th>Role</th><th>CAM profile</th><th>Action</th></tr></thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td>{u.displayName}</td>
+                      <td><code>{u.username}</code></td>
+                      <td><span className={u.role === USER_ROLES.MANAGER ? 'badge success' : 'badge muted'}>{u.role}</span></td>
+                      <td>{u.camProfileId ? camProfiles.find((p) => p.id === u.camProfileId)?.name || u.camProfileId : '—'}</td>
+                      <td>
+                        <button
+                          className="ghost-button"
+                          disabled={u.role === USER_ROLES.MANAGER}
+                          onClick={() => onUsersChange(deleteUser(users, u.id))}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <form className="user-create-form" onSubmit={submitNewUser}>
+              <input placeholder="Display name" value={newUser.displayName} onChange={(e) => setNewUser((v) => ({ ...v, displayName: e.target.value }))} />
+              <input placeholder="Username" value={newUser.username} onChange={(e) => setNewUser((v) => ({ ...v, username: e.target.value }))} />
+              <input placeholder="Password" value={newUser.password} onChange={(e) => setNewUser((v) => ({ ...v, password: e.target.value }))} />
+              <select value={newUser.role} onChange={(e) => setNewUser((v) => ({ ...v, role: e.target.value }))}>
+                {Object.values(USER_ROLES).map((r) => <option key={r}>{r}</option>)}
+              </select>
+              <select value={newUser.camProfileId} onChange={(e) => setNewUser((v) => ({ ...v, camProfileId: e.target.value }))}>
+                <option value="">No CAM profile</option>
+                {camProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <button className="secondary-button"><Plus size={14} /> Add user</button>
+            </form>
+          </section>
+        ) : null}
       </section>
     </main>
   );
@@ -547,6 +723,20 @@ function ClientOverview({ client, dailyImport }) {
             ))}
             {!overview.distribution.length ? <p className="muted">No active strategy distribution for this close.</p> : null}
           </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading"><h3>Monthly P&amp;L</h3><TrendingUp size={16} /></div>
+        <div className="history-strip">
+          {buildMonthlyTotals(client).map((m) => (
+            <div className="history-day" key={m.month}>
+              <span>{m.month.slice(5)}/{m.month.slice(0, 4)}</span>
+              <strong className={m.monthlyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(m.monthlyPnl)}</strong>
+              <small>{m.closedDays} days · {m.accounts} accts</small>
+            </div>
+          ))}
+          {!buildMonthlyTotals(client).length ? <p className="muted">No history yet.</p> : null}
         </div>
       </section>
 
@@ -763,6 +953,7 @@ function PriceChecksTab() {
 
 export default function App() {
   const [state, setState] = useState(() => loadDemoState());
+  const [users, setUsers] = useState(() => loadUsers());
   const [session, setSession] = useState(null);
   const [platformView, setPlatformView] = useState('manager');
   const [newClientName, setNewClientName] = useState('');
@@ -775,6 +966,7 @@ export default function App() {
   const [strategySetIndex, setStrategySetIndex] = useState({ status: 'Not loaded', records: [] });
 
   useEffect(() => saveDemoState(state), [state]);
+  useEffect(() => saveUsers(users), [users]);
 
   useEffect(() => {
     let cancelled = false;
@@ -883,7 +1075,19 @@ export default function App() {
   }
 
   if (!session) {
-    return <LoginScreen onLogin={(nextSession) => setSession(nextSession)} />;
+    return (
+      <LoginScreen
+        users={users}
+        onLogin={(user) => {
+          setSession(user);
+          if (user.role === USER_ROLES.CAM && user.camProfileId) {
+            openCamWorkspace(user.camProfileId);
+          } else {
+            setPlatformView('manager');
+          }
+        }}
+      />
+    );
   }
 
   if (platformView === 'manager') {
@@ -894,6 +1098,10 @@ export default function App() {
         onOpenCam={openCamWorkspace}
         onLoadDemo={() => setState(createDemoState())}
         onCreateCam={(name) => setState((current) => addCamProfile(current, name))}
+        onLogout={() => setSession(null)}
+        users={users}
+        onUsersChange={setUsers}
+        session={session}
       />
     );
   }
@@ -912,6 +1120,7 @@ export default function App() {
               <Upload size={14} /> Import
               <input type="file" accept=".json,application/json" hidden onChange={handleImport} />
             </label>
+            <button className="ghost-button" onClick={() => setSession(null)}><LogOut size={14} /> Out</button>
           </div>
         </div>
         <form className="client-form" onSubmit={handleAddClient}>

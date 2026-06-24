@@ -27,7 +27,7 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount, m
 
   return (
     <div className="table-wrap">
-      <table className="ops-table">
+      <table className="ops-table registry-table">
         <thead>
           <tr>
             <th>Account</th>
@@ -36,7 +36,11 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount, m
             {!isCash ? <th>Pass</th> : null}
             {!isCash ? <th>Direction</th> : null}
             {!isCash ? <th>Payout</th> : null}
-            {!isCash ? <th>Target</th> : null}
+            {!isCash ? <th>Target $</th> : null}
+            {!isCash ? <th>Max DD $</th> : null}
+            {!isCash ? <th>Date Added</th> : null}
+            {!isCash ? <th>Date Funded</th> : null}
+            {!isCash ? <th>Date Failed</th> : null}
             <th>Notes</th>
           </tr>
         </thead>
@@ -107,10 +111,49 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount, m
                     <input
                       type="number"
                       value={account.targetProfit ?? ''}
-                      placeholder="Target"
+                      placeholder="e.g. 52000"
                       onChange={(event) => onUpdateAccount(account.accountName, { targetProfit: event.target.value })}
                     />
                   )}
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
+                    <input
+                      type="number"
+                      value={account.maxDrawdownLimit ?? ''}
+                      placeholder="e.g. 2500"
+                      onChange={(event) => onUpdateAccount(account.accountName, { maxDrawdownLimit: event.target.value })}
+                    />
+                  )}
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  <input
+                    type="date"
+                    value={account.dateAdded || ''}
+                    onChange={(event) => onUpdateAccount(account.accountName, { dateAdded: event.target.value })}
+                  />
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  <input
+                    type="date"
+                    value={account.dateFunded || ''}
+                    onChange={(event) => onUpdateAccount(account.accountName, { dateFunded: event.target.value })}
+                  />
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  <input
+                    type="date"
+                    value={account.dateFailed || ''}
+                    onChange={(event) => onUpdateAccount(account.accountName, { dateFailed: event.target.value })}
+                  />
                 </td>
               ) : null}
               <td>

@@ -42,8 +42,15 @@ function createDefaultAccount(account, existing = {}) {
     status: existing.status || ACCOUNT_STATUSES.ACTIVE,
     payoutState: existing.payoutState || PAYOUT_STATES.NOT_REQUESTED,
     targetProfit: existing.targetProfit ?? '',
+    maxDrawdownLimit: existing.maxDrawdownLimit ?? '',
     bulletBotPassType: existing.bulletBotPassType || '',
+    bulletBotDirection: existing.bulletBotDirection || '',
     notes: existing.notes || '',
+    dateAdded: existing.dateAdded || nowIso().slice(0, 10),
+    dateFailed: existing.dateFailed || '',
+    dateFunded: existing.dateFunded || '',
+    dateLastPayout: existing.dateLastPayout || '',
+    payoutCount: existing.payoutCount ?? 0,
   };
 }
 
@@ -159,6 +166,44 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
         severity: 'Critical',
         accountName: account.accountName,
         message: `${meta.alias} is active but has no enabled strategy in this close.`,
+      }));
+    }
+
+    const ddLimit = Number(meta.maxDrawdownLimit);
+    if (Number.isFinite(ddLimit) && ddLimit > 0) {
+      const currentDD = Math.abs(account.trailingMaxDrawdown || 0);
+      if (currentDD > 0) {
+        const remaining = ddLimit - currentDD;
+        if (remaining <= 500) {
+          flags.push(makeFlag({
+            type: 'Drawdown near limit',
+            severity: 'Critical',
+            accountName: account.accountName,
+            message: `${meta.alias} is $${Math.max(0, Math.round(remaining))} from its $${ddLimit.toLocaleString()} max drawdown limit. Immediate action required.`,
+          }));
+        } else if (remaining <= 1200) {
+          flags.push(makeFlag({
+            type: 'Drawdown approaching limit',
+            severity: 'Warning',
+            accountName: account.accountName,
+            message: `${meta.alias} has $${Math.round(remaining)} remaining before its $${ddLimit.toLocaleString()} max drawdown limit.`,
+          }));
+        }
+      }
+    }
+
+    const targetProfit = Number(meta.targetProfit);
+    if (
+      meta.accountType === ACCOUNT_TYPES.FUNDED &&
+      Number.isFinite(targetProfit) && targetProfit > 0 &&
+      Number(account.accountBalance) >= targetProfit &&
+      meta.payoutState === PAYOUT_STATES.NOT_REQUESTED
+    ) {
+      flags.push(makeFlag({
+        type: 'Payout eligible',
+        severity: 'Warning',
+        accountName: account.accountName,
+        message: `${meta.alias} reached its target profit. Balance $${Number(account.accountBalance).toLocaleString()} ≥ target $${targetProfit.toLocaleString()}. Request payout.`,
       }));
     }
 
