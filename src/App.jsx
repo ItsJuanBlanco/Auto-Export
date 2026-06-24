@@ -1453,6 +1453,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [platformView, setPlatformView] = useState('manager');
   const [newClientName, setNewClientName] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
   const [activeTab, setActiveTab] = useState('Overview');
   const [selectedDate, setSelectedDate] = useState(todayIsoDate());
   const [showUpload, setShowUpload] = useState(false);
@@ -1653,6 +1654,12 @@ export default function App() {
           <input value={newClientName} placeholder="New client" onChange={(event) => setNewClientName(event.target.value)} />
           <button><Plus size={16} /></button>
         </form>
+        <input
+          className="client-search"
+          value={clientSearch}
+          placeholder="Search clients..."
+          onChange={(e) => setClientSearch(e.target.value)}
+        />
         <nav className="client-list">
           <button className={showOverview ? 'client-link active' : 'client-link'} onClick={() => setShowOverview(true)}>
             <Users size={16} />
@@ -1668,23 +1675,27 @@ export default function App() {
             </button>
           ))}
           <div className="nav-label">Clients</div>
-          {currentCamClients.map((client) => {
-            const badge = deriveClientBadge(client);
-            return (
-              <button
-                className={!showOverview && selectedClient?.id === client.id ? 'client-link active' : 'client-link'}
-                key={client.id}
-                onClick={() => {
-                  setState((current) => selectClient(current, client.id));
-                  setShowOverview(false);
-                }}
-              >
-                <BarChart3 size={16} />
-                <span>{client.name}</span>
-                <em className={badge.tone}>{badge.label}</em>
-              </button>
-            );
-          })}
+          {currentCamClients
+            .filter((c) => !clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase()))
+            .map((client) => {
+              const badge = deriveClientBadge(client);
+              const todayClose = getClientImportByDate(client, todayIsoDate());
+              const closeStatus = !todayClose ? 'no-close' : todayClose.status === 'Closed' ? 'closed' : 'uploaded';
+              return (
+                <button
+                  className={!showOverview && selectedClient?.id === client.id ? 'client-link active' : 'client-link'}
+                  key={client.id}
+                  onClick={() => {
+                    setState((current) => selectClient(current, client.id));
+                    setShowOverview(false);
+                  }}
+                >
+                  <span className={`close-dot close-dot-${closeStatus}`} title={closeStatus === 'no-close' ? 'No files today' : closeStatus === 'closed' ? 'Closed today' : 'Uploaded · not closed'} />
+                  <span>{client.name}</span>
+                  <em className={badge.tone}>{badge.label}</em>
+                </button>
+              );
+            })}
         </nav>
       </aside>
 
