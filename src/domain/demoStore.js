@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cam_crm_demo_state_v1';
-const DEMO_STATE_VERSION = 7;
+const DEMO_STATE_VERSION = 8;
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -139,7 +139,7 @@ function demoActivityEntry(type, text, daysBack = 0, accountName = '') {
   };
 }
 
-function demoClient({ id, name, registry, snapshots, executions, flags, activityLog = [] }) {
+function demoClient({ id, name, registry, snapshots, executions, flags, activityLog = [], tasks = [] }) {
   return {
     id,
     name,
@@ -155,6 +155,7 @@ function demoClient({ id, name, registry, snapshots, executions, flags, activity
     priceChecks: [],
     notes: `${name} demo account set for manager review.`,
     activityLog,
+    tasks,
   };
 }
 
@@ -199,6 +200,11 @@ export function createDemoState() {
         demoActivityEntry('Payout', 'BlueSky-7045 second payout approved: $2,500. Client confirmed receipt. Account cleared to trade.', 10, 'ROME7045'),
         demoActivityEntry('Call', 'Onboarding call. Explained evaluation rules, drawdown limits, and daily reporting schedule. Client prefers evening updates via WhatsApp.', 74, ''),
       ],
+      tasks: [
+        { id: 'task-rome-1', text: 'Request payout for BlueSky-7045 — second payout cycle approved, submit to firm portal by end of week.', dueDate: '2026-06-26', priority: 'High', accountName: 'ROME7045', done: false, createdAt: new Date(Date.now() - 86400000).toISOString() },
+        { id: 'task-rome-2', text: 'Verify Tradovate-9002 strategy reconnected and running after VPS reboot. Confirm no missed sessions.', dueDate: '', priority: 'Normal', accountName: 'ROME9002', done: false, createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+        { id: 'task-rome-3', text: 'Onboarding complete — review IFSP performance with client next Monday after full week of data.', dueDate: '2026-06-29', priority: 'Low', accountName: '', done: false, createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+      ],
     }),
     demoClient({
       id: 'client-todd',
@@ -228,6 +234,12 @@ export function createDemoState() {
         demoActivityEntry('Payout', 'BlueSky-5505 payout requested: $1,980. Submitted to prop firm portal. Account moved to Payout Hold status. Strategy disabled.', 4, 'TODD5505'),
         demoActivityEntry('Note', 'Apex-7713 (Bullet Bot Short) hit max loss on gap up open. Account marked Failed. Will open new eval next cycle.', 9, 'TODD7713'),
         demoActivityEntry('Call', 'Weekly review call with client. Discussed Bullet Bot performance — Long side profitable, Short side underperforming. Client approved switching Short to reserve after this eval.', 14, ''),
+      ],
+      tasks: [
+        { id: 'task-todd-1', text: 'Monitor BlueSky-5505 drawdown — only $300 remaining. If no payout approval by Friday, call prop firm directly.', dueDate: '2026-06-26', priority: 'High', accountName: 'TODD5505', done: false, createdAt: new Date(Date.now() - 86400000).toISOString() },
+        { id: 'task-todd-2', text: 'Process BlueSky-5505 payout request — confirm submission to prop firm portal, track approval status.', dueDate: '2026-06-25', priority: 'High', accountName: 'TODD5505', done: false, createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+        { id: 'task-todd-3', text: 'Open new Apex evaluation (Short side) for next Bullet Bot cycle after Apex-7713 failed.', dueDate: '2026-07-01', priority: 'Normal', accountName: '', done: false, createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+        { id: 'task-todd-4', text: 'Review Apex-7712 Long side Bullet Bot results after eval passes — determine if strategy performance justifies full funding.', dueDate: '', priority: 'Low', accountName: 'TODD7712', done: true, createdAt: new Date(Date.now() - 14 * 86400000).toISOString() },
       ],
     }),
     demoClient({
@@ -419,6 +431,27 @@ export function resolveFlagInImport(state, clientId, importId, flagId) {
         ? { ...di, flags: di.flags.map((f) => f.id === flagId ? { ...f, status: 'Resolved', resolvedAt: new Date().toISOString() } : f) }
         : di
     ),
+  }));
+}
+
+export function addTask(state, clientId, task) {
+  return updateClient(state, clientId, (client) => ({
+    ...client,
+    tasks: [...(client.tasks || []), task],
+  }));
+}
+
+export function updateTask(state, clientId, taskId, patch) {
+  return updateClient(state, clientId, (client) => ({
+    ...client,
+    tasks: (client.tasks || []).map((t) => t.id === taskId ? { ...t, ...patch } : t),
+  }));
+}
+
+export function deleteTask(state, clientId, taskId) {
+  return updateClient(state, clientId, (client) => ({
+    ...client,
+    tasks: (client.tasks || []).filter((t) => t.id !== taskId),
   }));
 }
 

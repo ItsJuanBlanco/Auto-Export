@@ -4,6 +4,7 @@ import {
   BarChart3,
   CalendarDays,
   CheckCircle2,
+  CheckSquare,
   ChevronDown,
   Download,
   FileText,
@@ -23,9 +24,11 @@ import {
   addActivityEntry,
   addClient,
   addCamProfile,
+  addTask,
   appendDailyImport,
   createDemoState,
   deleteActivityEntry,
+  deleteTask,
   exportFileName,
   getClientImportByDate,
   loadDemoState,
@@ -38,6 +41,7 @@ import {
   todayIsoDate,
   updateClientDetails,
   updateImportStatus,
+  updateTask,
   upsertAccountMeta,
 } from './domain/demoStore';
 import { buildCamOverview } from './domain/camOverview';
@@ -52,7 +56,7 @@ import {
   saveUsers,
 } from './domain/userStore';
 
-const STATIC_TABS = ['Activity', 'Credentials & Notes', 'Price Checks'];
+const STATIC_TABS = ['Activity', 'Tasks', 'Credentials & Notes', 'Price Checks'];
 
 function deriveClientBadge(client) {
   const latest = client.dailyImports.at(-1);
@@ -1182,6 +1186,118 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
   );
 }
 
+const TASK_PRIORITIES = ['Normal', 'High', 'Low'];
+
+function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
+  const [text, setText] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [priority, setPriority] = useState('Normal');
+  const [accountName, setAccountName] = useState('');
+  const tasks = (client.tasks || []).sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (a.priority === 'High' && b.priority !== 'High') return -1;
+    if (b.priority === 'High' && a.priority !== 'High') return 1;
+    if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+    if (a.dueDate) return -1;
+    if (b.dueDate) return 1;
+    return 0;
+  });
+  const openCount = tasks.filter((t) => !t.done).length;
+  const accounts = Object.values(client.accountRegistry || {});
+
+  function submit(event) {
+    event.preventDefault();
+    if (!text.trim()) return;
+    onAddTask({
+      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      text: text.trim(),
+      dueDate,
+      priority,
+      accountName,
+      done: false,
+      createdAt: new Date().toISOString(),
+    });
+    setText('');
+    setDueDate('');
+    setPriority('Normal');
+    setAccountName('');
+  }
+
+  function formatDue(date) {
+    if (!date) return null;
+    const d = new Date(date + 'T12:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((d - today) / 86400000);
+    if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, tone: 'negative' };
+    if (diff === 0) return { label: 'Due today', tone: 'negative' };
+    if (diff === 1) return { label: 'Due tomorrow', tone: 'warning' };
+    return { label: `Due ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, tone: 'muted' };
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <h3>Tasks</h3>
+        {openCount > 0 ? <span className="count">{openCount} open</span> : <span className="badge success">All done</span>}
+      </div>
+      <form className="task-form" onSubmit={submit}>
+        <input
+          className="task-text-input"
+          value={text}
+          placeholder="Add a follow-up task (e.g. call client about drawdown, request payout...)"
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="task-form-meta">
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} title="Due date (optional)" />
+          <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+            {TASK_PRIORITIES.map((p) => <option key={p}>{p}</option>)}
+          </select>
+          <select value={accountName} onChange={(e) => setAccountName(e.target.value)}>
+            <option value="">All accounts</option>
+            {accounts.map((a) => <option key={a.accountName} value={a.accountName}>{a.alias || a.accountName}</option>)}
+          </select>
+          <button className="primary-button"><Plus size={14} /> Add task</button>
+        </div>
+      </form>
+      {tasks.length ? (
+        <div className="task-list">
+          {tasks.map((task) => {
+            const due = formatDue(task.dueDate);
+            const alias = task.accountName
+              ? (accounts.find((a) => a.accountName === task.accountName)?.alias || task.accountName)
+              : null;
+            return (
+              <div className={`task-row${task.done ? ' task-done' : ''}${task.priority === 'High' && !task.done ? ' task-high' : ''}`} key={task.id}>
+                <button
+                  className="task-checkbox"
+                  title={task.done ? 'Mark open' : 'Mark done'}
+                  onClick={() => onUpdateTask(task.id, { done: !task.done })}
+                >
+                  <CheckSquare size={16} className={task.done ? 'task-checked' : 'task-unchecked'} />
+                </button>
+                <div className="task-body">
+                  <span className="task-text">{task.text}</span>
+                  <div className="task-chips">
+                    {task.priority === 'High' && !task.done ? <span className="task-chip task-chip-high">High</span> : null}
+                    {alias ? <span className="task-chip">{alias}</span> : null}
+                    {due ? <span className={`task-chip task-chip-due ${due.tone}`}>{due.label}</span> : null}
+                  </div>
+                </div>
+                <button className="ghost-button icon-only" onClick={() => onDeleteTask(task.id)} title="Delete task">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="muted">No tasks yet. Add follow-ups, reminders, or action items above.</p>
+      )}
+    </section>
+  );
+}
+
 function CredentialsTab({ client, onUpdateClient }) {
   const credentials = client.credentials || {};
   return (
@@ -1337,6 +1453,21 @@ export default function App() {
     setState((current) => deleteActivityEntry(current, selectedClient.id, entryId));
   }
 
+  function handleAddTask(task) {
+    if (!selectedClient) return;
+    setState((current) => addTask(current, selectedClient.id, task));
+  }
+
+  function handleUpdateTask(taskId, patch) {
+    if (!selectedClient) return;
+    setState((current) => updateTask(current, selectedClient.id, taskId, patch));
+  }
+
+  function handleDeleteTask(taskId) {
+    if (!selectedClient) return;
+    setState((current) => deleteTask(current, selectedClient.id, taskId));
+  }
+
   function closeImport() {
     if (!selectedClient || !dailyImport) return;
     setState((current) => updateImportStatus(current, selectedClient.id, dailyImport.id, 'Closed'));
@@ -1481,6 +1612,7 @@ export default function App() {
 
               {effectiveActiveTab === 'Overview' ? <ClientOverview client={selectedClient} dailyImport={dailyImport} /> : null}
               {effectiveActiveTab === 'Activity' ? <ActivityLog client={selectedClient} onAddEntry={handleAddActivity} onDeleteEntry={handleDeleteActivity} /> : null}
+              {effectiveActiveTab === 'Tasks' ? <TasksTab client={selectedClient} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} /> : null}
               {effectiveActiveTab === 'Credentials & Notes' ? <CredentialsTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
               {effectiveActiveTab === 'Price Checks' ? <PriceChecksTab /> : null}
               {['Review', 'Evaluations', 'Funded', 'Cash'].includes(effectiveActiveTab) ? (
