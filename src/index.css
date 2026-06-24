@@ -1253,6 +1253,31 @@ textarea {
 .monthly-breakdown-row { border-top: 1px solid var(--line); }
 .monthly-breakdown-row strong { font-weight: 600; }
 
+/* Activity log */
+.activity-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.activity-form-row { display: flex; gap: 8px; }
+.activity-form-row select { flex: 1; }
+.activity-form textarea { width: 100%; resize: vertical; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text); padding: 8px 10px; }
+
+.activity-list { display: flex; flex-direction: column; gap: 0; }
+.activity-entry { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.activity-entry:last-child { border-bottom: none; }
+.activity-entry p { margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: var(--text); }
+
+.activity-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.activity-meta em { color: var(--muted); font-size: 12px; font-style: normal; margin-left: auto; }
+.activity-meta code { font-size: 11px; background: var(--surface-3); padding: 1px 6px; border-radius: 4px; color: var(--muted); }
+.activity-meta .ghost-button.icon-only { padding: 2px 4px; opacity: 0.5; }
+.activity-meta .ghost-button.icon-only:hover { opacity: 1; }
+
+.activity-type { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.activity-call    { background: rgba(69,163,255,0.15); color: var(--blue); }
+.activity-note    { background: rgba(167,139,250,0.15); color: var(--purple); }
+.activity-payout  { background: rgba(47,202,115,0.15); color: var(--green); }
+.activity-alert   { background: rgba(255,90,105,0.15); color: var(--red); }
+.activity-email   { background: rgba(244,187,68,0.15); color: var(--yellow); }
+.activity-other   { background: var(--surface-3); color: var(--muted); }
+
 @media (max-width: 980px) {
   .app-shell, .manager-shell { grid-template-columns: 1fr; }
   .sidebar, .manager-sidebar { min-height: auto; }

@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cam_crm_demo_state_v1';
-const DEMO_STATE_VERSION = 6;
+const DEMO_STATE_VERSION = 7;
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -127,7 +127,19 @@ function buildHistoricalImports({ id, registry, snapshots, executions, flags }) 
   });
 }
 
-function demoClient({ id, name, registry, snapshots, executions, flags }) {
+function demoActivityEntry(type, text, daysBack = 0, accountName = '') {
+  const date = new Date();
+  date.setDate(date.getDate() - daysBack);
+  return {
+    id: `act-${type}-${daysBack}-${accountName || 'general'}`,
+    type,
+    text,
+    accountName,
+    createdAt: date.toISOString(),
+  };
+}
+
+function demoClient({ id, name, registry, snapshots, executions, flags, activityLog = [] }) {
   return {
     id,
     name,
@@ -142,6 +154,7 @@ function demoClient({ id, name, registry, snapshots, executions, flags }) {
     },
     priceChecks: [],
     notes: `${name} demo account set for manager review.`,
+    activityLog,
   };
 }
 
@@ -180,6 +193,12 @@ export function createDemoState() {
         demoFlag('Drawdown near limit', 'Critical', 'ROME8801', 'Lucid - 8801 is $400 from its $2,000 max drawdown limit. Calculation: max_dd_limit - abs(trailing_drawdown) = 2000 - 1600 = 400. Immediate action required.'),
         demoFlag('Strategy underperforming peers', 'Warning', 'ROME8801', 'Lucid - 8801 is below peer average for IFSP 1.1. Calculation: daily realized is compared against same-family instances and flagged when below mean minus 1.5 standard deviations.'),
       ],
+      activityLog: [
+        demoActivityEntry('Call', 'Called client. Reviewed IFSP underperformance on Lucid-8801. Client wants to leave strategy running through end of week before switching. Agreed to monitor daily.', 0, 'ROME8801'),
+        demoActivityEntry('Note', 'Tradovate-9002 showing $0 P&L despite OGX_PF enabled. Checked VPS — connection dropped around 9:15am. Strategy was flat all day. VPS rebooted and confirmed reconnected.', 1, 'ROME9002'),
+        demoActivityEntry('Payout', 'BlueSky-7045 second payout approved: $2,500. Client confirmed receipt. Account cleared to trade.', 10, 'ROME7045'),
+        demoActivityEntry('Call', 'Onboarding call. Explained evaluation rules, drawdown limits, and daily reporting schedule. Client prefers evening updates via WhatsApp.', 74, ''),
+      ],
     }),
     demoClient({
       id: 'client-todd',
@@ -203,6 +222,12 @@ export function createDemoState() {
         demoFlag('Drawdown near limit', 'Critical', 'TODD5505', 'BlueSky - 5505 is $300 from its $2,500 max drawdown limit. Calculation: max_dd_limit - abs(trailing_drawdown) = 2500 - 2200 = 300. Immediate action required.'),
         demoFlag('Payout hold violation', 'Critical', 'TODD5505', 'BlueSky - 5505 is in payout hold but still has an enabled strategy. Calculation: status = Payout Hold and active strategy count > 0.'),
         demoFlag('Bullet Bot failed', 'Critical', 'TODD7713', 'Apex - 7713 hit failed status after Bullet Bot loss. Calculation: account status manually set to Failed and daily PnL is negative.'),
+      ],
+      activityLog: [
+        demoActivityEntry('Alert', 'CRITICAL: BlueSky-5505 drawdown at $300 remaining. Disabled RBO_PF strategy immediately. Client notified via WhatsApp. Waiting for payout approval before re-enabling.', 0, 'TODD5505'),
+        demoActivityEntry('Payout', 'BlueSky-5505 payout requested: $1,980. Submitted to prop firm portal. Account moved to Payout Hold status. Strategy disabled.', 4, 'TODD5505'),
+        demoActivityEntry('Note', 'Apex-7713 (Bullet Bot Short) hit max loss on gap up open. Account marked Failed. Will open new eval next cycle.', 9, 'TODD7713'),
+        demoActivityEntry('Call', 'Weekly review call with client. Discussed Bullet Bot performance — Long side profitable, Short side underperforming. Client approved switching Short to reserve after this eval.', 14, ''),
       ],
     }),
     demoClient({
@@ -384,6 +409,20 @@ export function selectClient(state, clientId) {
     ...state,
     selectedClientId: clientId,
   };
+}
+
+export function addActivityEntry(state, clientId, entry) {
+  return updateClient(state, clientId, (client) => ({
+    ...client,
+    activityLog: [entry, ...(client.activityLog || [])],
+  }));
+}
+
+export function deleteActivityEntry(state, clientId, entryId) {
+  return updateClient(state, clientId, (client) => ({
+    ...client,
+    activityLog: (client.activityLog || []).filter((e) => e.id !== entryId),
+  }));
 }
 
 export function upsertAccountMeta(state, clientId, accountName, patch) {

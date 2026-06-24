@@ -20,10 +20,12 @@ import AccountManager from './components/AccountManager';
 import Dashboard from './components/Dashboard';
 import UploadArea from './components/UploadArea';
 import {
+  addActivityEntry,
   addClient,
   addCamProfile,
   appendDailyImport,
   createDemoState,
+  deleteActivityEntry,
   exportFileName,
   getClientImportByDate,
   loadDemoState,
@@ -49,7 +51,7 @@ import {
   saveUsers,
 } from './domain/userStore';
 
-const STATIC_TABS = ['Credentials & Notes', 'Price Checks'];
+const STATIC_TABS = ['Activity', 'Credentials & Notes', 'Price Checks'];
 
 function deriveClientBadge(client) {
   const latest = client.dailyImports.at(-1);
@@ -1044,6 +1046,77 @@ function MovementSparkline({ points = [] }) {
   );
 }
 
+const ACTIVITY_TYPES = ['Note', 'Call', 'Payout', 'Alert', 'Email', 'Other'];
+
+function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
+  const [text, setText] = useState('');
+  const [type, setType] = useState('Note');
+  const [accountName, setAccountName] = useState('');
+  const log = client.activityLog || [];
+  const accounts = Object.values(client.accountRegistry || {});
+
+  function submit(event) {
+    event.preventDefault();
+    if (!text.trim()) return;
+    onAddEntry({
+      id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type,
+      text: text.trim(),
+      accountName,
+      createdAt: new Date().toISOString(),
+    });
+    setText('');
+  }
+
+  function formatDate(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return iso;
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-heading"><h3>Activity log</h3><span className="count">{log.length}</span></div>
+      <form className="activity-form" onSubmit={submit}>
+        <div className="activity-form-row">
+          <select value={type} onChange={(e) => setType(e.target.value)}>
+            {ACTIVITY_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+          <select value={accountName} onChange={(e) => setAccountName(e.target.value)}>
+            <option value="">All accounts</option>
+            {accounts.map((a) => <option key={a.accountName} value={a.accountName}>{a.alias || a.accountName}</option>)}
+          </select>
+          <button className="primary-button">+ Log</button>
+        </div>
+        <textarea
+          value={text}
+          placeholder="What happened? (call outcome, action taken, client feedback...)"
+          onChange={(e) => setText(e.target.value)}
+          rows={3}
+        />
+      </form>
+      {log.length ? (
+        <div className="activity-list">
+          {log.map((entry) => (
+            <div className="activity-entry" key={entry.id}>
+              <div className="activity-meta">
+                <span className={`activity-type activity-${entry.type?.toLowerCase()}`}>{entry.type || 'Note'}</span>
+                {entry.accountName ? <code>{Object.values(client.accountRegistry || {}).find((a) => a.accountName === entry.accountName)?.alias || entry.accountName}</code> : null}
+                <em>{formatDate(entry.createdAt)}</em>
+                <button className="ghost-button icon-only" onClick={() => onDeleteEntry(entry.id)} title="Delete entry"><Trash2 size={13} /></button>
+              </div>
+              <p>{entry.text}</p>
+            </div>
+          ))}
+        </div>
+      ) : <p className="muted">No activity logged yet. Use the form above to log calls, notes, and actions.</p>}
+    </section>
+  );
+}
+
 function CredentialsTab({ client, onUpdateClient }) {
   const credentials = client.credentials || {};
   return (
@@ -1182,6 +1255,16 @@ export default function App() {
   function handleUpdateClient(patch) {
     if (!selectedClient) return;
     setState((current) => updateClientDetails(current, selectedClient.id, patch));
+  }
+
+  function handleAddActivity(entry) {
+    if (!selectedClient) return;
+    setState((current) => addActivityEntry(current, selectedClient.id, entry));
+  }
+
+  function handleDeleteActivity(entryId) {
+    if (!selectedClient) return;
+    setState((current) => deleteActivityEntry(current, selectedClient.id, entryId));
   }
 
   function closeImport() {
@@ -1325,6 +1408,7 @@ export default function App() {
               </div>
 
               {effectiveActiveTab === 'Overview' ? <ClientOverview client={selectedClient} dailyImport={dailyImport} /> : null}
+              {effectiveActiveTab === 'Activity' ? <ActivityLog client={selectedClient} onAddEntry={handleAddActivity} onDeleteEntry={handleDeleteActivity} /> : null}
               {effectiveActiveTab === 'Credentials & Notes' ? <CredentialsTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
               {effectiveActiveTab === 'Price Checks' ? <PriceChecksTab /> : null}
               {['Review', 'Evaluations', 'Funded', 'Cash'].includes(effectiveActiveTab) ? (
