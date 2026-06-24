@@ -1216,6 +1216,43 @@ textarea {
   gap: 10px;
 }
 
+/* Risk level badges on target rows */
+.risk-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.risk-critical { background: rgba(255,90,105,0.18); color: var(--red); }
+.risk-high     { background: rgba(244,187,68,0.18); color: var(--yellow); }
+.risk-medium   { background: rgba(69,163,255,0.15); color: var(--blue); }
+.risk-low      { background: rgba(47,202,115,0.15); color: var(--green); }
+
+/* Monthly per-account breakdown */
+.history-day.clickable { cursor: pointer; border: 1px solid transparent; transition: border-color 0.15s; }
+.history-day.clickable:hover, .history-day.clickable.active { border-color: var(--blue); background: var(--surface-3); }
+
+.monthly-account-breakdown {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.monthly-breakdown-head,
+.monthly-breakdown-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 50px;
+  gap: 8px;
+  padding: 5px 4px;
+  font-size: 13px;
+  align-items: center;
+}
+.monthly-breakdown-head { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.monthly-breakdown-row { border-top: 1px solid var(--line); }
+.monthly-breakdown-row strong { font-weight: 600; }
+
 @media (max-width: 980px) {
   .app-shell, .manager-shell { grid-template-columns: 1fr; }
   .sidebar, .manager-sidebar { min-height: auto; }

@@ -324,6 +324,83 @@ function buildLifecycleMetrics(clients = []) {
   };
 }
 
+// Monthly P&L grouped by account
+function buildMonthlyByAccount(client) {
+  const byMonth = {};
+  for (const di of client.dailyImports || []) {
+    const month = di.date.slice(0, 7);
+    if (!byMonth[month]) byMonth[month] = {};
+    const registry = { ...(di.accounts || {}), ...(client.accountRegistry || {}) };
+    for (const snapshot of di.snapshots || []) {
+      const alias = registry[snapshot.accountName]?.alias || snapshot.accountName;
+      if (!byMonth[month][snapshot.accountName]) {
+        byMonth[month][snapshot.accountName] = { accountName: snapshot.accountName, alias, pnl: 0, days: 0 };
+      }
+      byMonth[month][snapshot.accountName].pnl += Number(snapshot.grossRealizedPnl || 0);
+      byMonth[month][snapshot.accountName].days += 1;
+    }
+  }
+  return Object.entries(byMonth)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, accounts]) => ({
+      month,
+      accounts: Object.values(accounts).sort((a, b) => b.pnl - a.pnl),
+    }));
+}
+
+// Drawdown-based risk level for an account
+function accountRiskLevel(snapshot, meta) {
+  const ddLimit = Number(meta?.maxDrawdownLimit || 0);
+  if (!ddLimit) return null;
+  const used = Math.abs(Number(snapshot?.trailingMaxDrawdown || 0));
+  const pct = used / ddLimit;
+  if (pct >= 0.85) return { level: 'Critical', pct };
+  if (pct >= 0.65) return { level: 'High', pct };
+  if (pct >= 0.40) return { level: 'Medium', pct };
+  return { level: 'Low', pct };
+}
+
+// Detect possible VPS/algo disconnect: enabled strategy + zero P&L when prior avg was positive
+function buildDisconnectAlerts(client) {
+  const alerts = [];
+  const latest = client.dailyImports?.at(-1);
+  if (!latest) return alerts;
+  const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+
+  for (const snapshot of latest.snapshots || []) {
+    const meta = registry[snapshot.accountName] || {};
+    if (meta.accountType === 'Inactive / Ignore') continue;
+    if (['Inactive', 'Failed', 'Reserve'].includes(meta.status)) continue;
+
+    const activeStrategies = (snapshot.strategies || []).filter((s) => s.enabled);
+    if (activeStrategies.length === 0) continue;
+
+    const todayPnl = Number(snapshot.grossRealizedPnl || 0);
+    if (todayPnl !== 0) continue;
+
+    const priorPnls = (client.dailyImports.slice(-6, -1) || [])
+      .map((di) => {
+        const s = (di.snapshots || []).find((x) => x.accountName === snapshot.accountName);
+        return s ? Number(s.grossRealizedPnl || 0) : null;
+      })
+      .filter((v) => v !== null && v !== 0);
+
+    if (priorPnls.length >= 3) {
+      const avg = priorPnls.reduce((sum, v) => sum + v, 0) / priorPnls.length;
+      if (avg > 50) {
+        alerts.push({
+          id: `disc-${snapshot.accountName}`,
+          accountName: snapshot.accountName,
+          alias: meta.alias || snapshot.accountName,
+          avgPnl: avg,
+          message: `${meta.alias || snapshot.accountName} has active strategies but $0 P&L today. Prior 5-day avg: ${formatCurrency(avg)}. Verify VPS/strategy connection.`,
+        });
+      }
+    }
+  }
+  return alerts;
+}
+
 function clientsForCam(clients = [], camProfile = null) {
   const clientIds = camProfile?.clientIds || [];
   if (!clientIds.length) return [];
@@ -672,8 +749,12 @@ function ClientPnlChart({ history = [] }) {
 }
 
 function ClientOverview({ client, dailyImport }) {
+  const [monthlyExpanded, setMonthlyExpanded] = useState('');
   const overview = buildClientOverview(client, dailyImport);
   const maxDistribution = Math.max(...overview.distribution.map((item) => item.count), 1);
+  const disconnectAlerts = buildDisconnectAlerts(client);
+  const monthlyByAccount = buildMonthlyByAccount(client);
+  const latestRegistry = { ...(dailyImport?.accounts || {}), ...(client?.accountRegistry || {}) };
 
   return (
     <div className="dashboard-stack">
@@ -726,33 +807,76 @@ function ClientOverview({ client, dailyImport }) {
         </div>
       </section>
 
+      {disconnectAlerts.length > 0 ? (
+        <section className="panel danger-panel">
+          <div className="panel-heading"><h3>Anomaly detection</h3><span className="count">{disconnectAlerts.length}</span></div>
+          <div className="flag-list">
+            {disconnectAlerts.map((alert) => (
+              <div className="flag critical" key={alert.id}>
+                <AlertTriangle size={16} />
+                <div>
+                  <strong>Possible VPS / algo disconnect — {alert.alias}</strong>
+                  <span>{alert.message}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="panel">
         <div className="panel-heading"><h3>Monthly P&amp;L</h3><TrendingUp size={16} /></div>
         <div className="history-strip">
           {buildMonthlyTotals(client).map((m) => (
-            <div className="history-day" key={m.month}>
+            <button
+              className={`history-day clickable${monthlyExpanded === m.month ? ' active' : ''}`}
+              key={m.month}
+              onClick={() => setMonthlyExpanded((v) => v === m.month ? '' : m.month)}
+            >
               <span>{m.month.slice(5)}/{m.month.slice(0, 4)}</span>
               <strong className={m.monthlyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(m.monthlyPnl)}</strong>
               <small>{m.closedDays} days · {m.accounts} accts</small>
-            </div>
+            </button>
           ))}
           {!buildMonthlyTotals(client).length ? <p className="muted">No history yet.</p> : null}
         </div>
+        {monthlyExpanded ? (
+          <div className="monthly-account-breakdown">
+            <div className="monthly-breakdown-head">
+              <span>Account</span><span>Monthly P&amp;L</span><span>Days</span>
+            </div>
+            {(monthlyByAccount.find((m) => m.month === monthlyExpanded)?.accounts || []).map((row) => (
+              <div className="monthly-breakdown-row" key={row.accountName}>
+                <span>{row.alias}</span>
+                <strong className={row.pnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.pnl)}</strong>
+                <small>{row.days}d</small>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="panel">
         <div className="panel-heading"><h3>Closest to target</h3><span className="badge muted">Evaluation / funded progress</span></div>
         <div className="target-list">
-          {overview.passProgress.slice(0, 6).map((account) => (
-            <div className="target-row" key={account.accountName}>
-              <div>
-                <strong>{account.alias}</strong>
-                <span>{account.accountType} · {formatCurrency(account.balance)} balance · {formatCurrency(account.remaining)} remaining</span>
+          {overview.passProgress.slice(0, 6).map((account) => {
+            const snapshot = (dailyImport?.snapshots || []).find((s) => s.accountName === account.accountName);
+            const meta = latestRegistry[account.accountName] || {};
+            const risk = accountRiskLevel(snapshot, meta);
+            return (
+              <div className="target-row" key={account.accountName}>
+                <div>
+                  <strong>
+                    {account.alias}
+                    {risk ? <span className={`risk-badge risk-${risk.level.toLowerCase()}`}>{risk.level} risk · {Math.round(risk.pct * 100)}% DD used</span> : null}
+                  </strong>
+                  <span>{account.accountType} · {formatCurrency(account.balance)} balance · {formatCurrency(account.remaining)} remaining</span>
+                </div>
+                <div className="progress-track"><i style={{ width: `${account.progress}%` }} /></div>
+                <em>{Math.round(account.progress)}%</em>
               </div>
-              <div className="progress-track"><i style={{ width: `${account.progress}%` }} /></div>
-              <em>{Math.round(account.progress)}%</em>
-            </div>
-          ))}
+            );
+          })}
           {!overview.passProgress.length ? <p className="muted">No target-bearing accounts for this client.</p> : null}
         </div>
       </section>
