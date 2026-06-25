@@ -649,13 +649,25 @@ function buildPnlVarianceAnalysis(client, allClients = []) {
 // Drawdown-based risk level for an account
 function accountRiskLevel(snapshot, meta) {
   const ddLimit = Number(meta?.maxDrawdownLimit || 0);
-  if (!ddLimit) return null;
-  const used = Math.abs(Number(snapshot?.trailingMaxDrawdown || 0));
-  const pct = used / ddLimit;
-  if (pct >= 0.85) return { level: 'Critical', pct };
-  if (pct >= 0.65) return { level: 'High', pct };
-  if (pct >= 0.40) return { level: 'Medium', pct };
-  return { level: 'Low', pct };
+  const rawDD = Number(snapshot?.trailingMaxDrawdown || 0);
+  if (ddLimit > 0) {
+    // Model 1: configured limit — rawDD is cumulative loss (abs = used)
+    const used = Math.abs(rawDD);
+    const pct = used / ddLimit;
+    if (pct >= 0.85) return { level: 'Critical', pct };
+    if (pct >= 0.65) return { level: 'High', pct };
+    if (pct >= 0.40) return { level: 'Medium', pct };
+    return { level: 'Low', pct };
+  }
+  if (rawDD > 0) {
+    // Model 2: no configured limit — rawDD IS the remaining buffer
+    // Use thresholds: Critical ≤ $500, High ≤ $1200, Medium ≤ $2500
+    if (rawDD <= 500) return { level: 'Critical', pct: null };
+    if (rawDD <= 1200) return { level: 'High', pct: null };
+    if (rawDD <= 2500) return { level: 'Medium', pct: null };
+    return { level: 'Low', pct: null };
+  }
+  return null;
 }
 
 // Detect consistency rule risk: best day > 30% of total positive P&L on a funded account
