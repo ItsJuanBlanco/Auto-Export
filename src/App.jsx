@@ -89,6 +89,16 @@ class ErrorBoundary extends React.Component {
 
 const STATIC_TABS = ['Activity', 'Tasks', 'Credentials & Notes', 'Price Checks', 'Stack Playbook'];
 
+// Builds a lowercase-keyed registry map from import accounts + client registry.
+// Prevents silent cache misses when CSV and registry keys have different casing.
+function mergeRegistryCi(importAccounts, clientRegistry) {
+  const merged = { ...(importAccounts || {}), ...(clientRegistry || {}) };
+  return Object.fromEntries(Object.entries(merged).map(([k, v]) => [k.toLowerCase(), v]));
+}
+function ciMeta(regByLower, accountName) {
+  return regByLower[(accountName || '').toLowerCase()] || {};
+}
+
 function deriveClientBadge(client) {
   const latest = client.dailyImports.at(-1);
   if (!latest) return { label: 'No data', tone: 'muted' };
@@ -719,10 +729,10 @@ function buildDisconnectAlerts(client) {
   do { prevTrading.setDate(prevTrading.getDate() - 1); } while ([0, 6].includes(prevTrading.getDay()));
   const prevTradingStr = prevTrading.toISOString().slice(0, 10);
   if (latest.date !== today && latest.date !== prevTradingStr) return alerts;
-  const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+  const registry = mergeRegistryCi(latest.accounts, client.accountRegistry);
 
   for (const snapshot of latest.snapshots || []) {
-    const meta = registry[snapshot.accountName] || {};
+    const meta = ciMeta(registry, snapshot.accountName);
     if (meta.accountType === 'Inactive / Ignore') continue;
     if (['Inactive', 'Failed', 'Reserve'].includes(meta.status)) continue;
 
@@ -767,12 +777,12 @@ function buildRiskDistribution(clients = [], camProfiles = []) {
   for (const client of clients) {
     const latest = client.dailyImports?.at(-1);
     if (!latest) continue;
-    const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+    const registry = mergeRegistryCi(latest.accounts, client.accountRegistry);
     const camId = clientCam[client.id];
     const camName = camById[camId]?.name || '—';
 
     for (const snapshot of latest.snapshots || []) {
-      const meta = registry[snapshot.accountName] || {};
+      const meta = ciMeta(registry, snapshot.accountName);
       if (meta.accountType === 'Inactive / Ignore' || meta.accountType === 'Cash') continue;
       if (['Inactive', 'Failed'].includes(meta.status)) continue;
 
@@ -948,10 +958,10 @@ function buildCamPerformance(clients = [], camProfiles = []) {
     const bucket = camMap[camId];
     const latest = client.dailyImports?.at(-1);
     if (!latest) continue;
-    const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+    const registry = mergeRegistryCi(latest.accounts, client.accountRegistry);
     bucket.clients++;
     for (const snap of latest.snapshots || []) {
-      const meta = registry[snap.accountName] || {};
+      const meta = ciMeta(registry, snap.accountName);
       if (meta.accountType === 'Inactive / Ignore') continue;
       bucket.totalAccounts++;
       bucket.weeklyPnl += Number(snap.weeklyPnl || 0);
@@ -988,9 +998,9 @@ function buildAllFundedAccounts(clients = [], camProfiles = []) {
   for (const client of clients) {
     const latest = client.dailyImports?.at(-1);
     if (!latest) continue;
-    const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+    const registry = mergeRegistryCi(latest.accounts, client.accountRegistry);
     for (const snap of latest.snapshots || []) {
-      const meta = registry[snap.accountName] || {};
+      const meta = ciMeta(registry, snap.accountName);
       if (meta.accountType !== 'Funded') continue;
       const ddLimit = Number(meta.maxDrawdownLimit || 0);
       const rawDD = Number(snap.trailingMaxDrawdown || 0);
@@ -3198,9 +3208,9 @@ function buildIncomeProjection(clients = []) {
   for (const client of clients) {
     const latest = client.dailyImports?.at(-1);
     if (!latest) continue;
-    const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+    const registry = mergeRegistryCi(latest.accounts, client.accountRegistry);
     for (const snap of latest.snapshots || []) {
-      const meta = registry[snap.accountName] || {};
+      const meta = ciMeta(registry, snap.accountName);
       if (meta.accountType !== 'Funded') continue;
       const target = Number(meta.targetProfit || 0);
       const start = Number(meta.startBalance || 0);
