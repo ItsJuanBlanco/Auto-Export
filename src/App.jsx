@@ -53,6 +53,7 @@ import {
   updateImportStatus,
   updateTask,
   upsertAccountMeta,
+  getStorageUsageKB,
 } from './domain/demoStore';
 import { buildCamOverview } from './domain/camOverview';
 import { recalculateDailyImport, reconcileDailyImport } from './domain/reconcile';
@@ -4642,6 +4643,7 @@ export default function App() {
               <input type="file" accept=".json,application/json" hidden onChange={handleImport} />
             </label>
           </div>
+          {(() => { const kb = getStorageUsageKB(); const pct = Math.min(100, Math.round(kb / 50)); return kb > 1000 ? <div style={{fontSize:10,color: kb > 4000 ? 'var(--negative)' : 'var(--warning)',padding:'2px 4px'}} title={`${kb} KB used of ~5120 KB limit`}>⚠ Storage: {Math.round(kb/1024*10)/10} MB / ~5 MB{kb > 4000 ? ' — export backup now!' : ''}</div> : null; })()}
         </div>
         <form className="client-form" onSubmit={handleAddClient}>
           <input value={newClientName} placeholder="New client" onChange={(event) => setNewClientName(event.target.value)} />

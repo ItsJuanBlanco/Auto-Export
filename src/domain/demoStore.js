@@ -626,5 +626,22 @@ export function loadDemoState() {
 
 export function saveDemoState(state) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22) {
+      console.error('[CRM] localStorage quota exceeded — data not saved!', e);
+      alert('⚠️ Storage full: your browser\'s local storage is full. Export a backup now (sidebar → Export JSON), then delete old data to free space. Changes since last save may be lost.');
+    } else {
+      console.error('[CRM] Failed to save state:', e);
+    }
+  }
+}
+
+export function getStorageUsageKB() {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY) || '';
+    return Math.round((raw.length * 2) / 1024);
+  } catch { return 0; }
 }
