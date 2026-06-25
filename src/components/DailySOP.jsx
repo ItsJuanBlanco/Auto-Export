@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { CheckSquare, Square, RotateCcw } from 'lucide-react';
+import { CheckSquare, Square, RotateCcw, Zap } from 'lucide-react';
 
 const SOP_SECTIONS = [
   {
     title: 'Morning Open',
     time: '8:00–9:00 AM',
+    emoji: '🌅',
     items: [
       'Log in to VPS for each client — confirm not frozen',
       'Verify all algos are active (green status in NT)',
@@ -16,6 +17,7 @@ const SOP_SECTIONS = [
   {
     title: 'Market Hours Check-In',
     time: 'Every ~1 hour',
+    emoji: '📡',
     items: [
       'Verify algos still running (no silent crashes)',
       'Check P&L progress vs daily target',
@@ -27,6 +29,7 @@ const SOP_SECTIONS = [
   {
     title: 'Mid-Session Review',
     time: '12:00–1:00 PM',
+    emoji: '🔍',
     items: [
       'Check if any account hit daily loss limit',
       'Review drawdown buffer on funded accounts — warning if <$1,200',
@@ -38,6 +41,7 @@ const SOP_SECTIONS = [
   {
     title: 'Market Close & Report',
     time: 'After market close',
+    emoji: '📊',
     items: [
       'Import NT CSV export for each client',
       'Review and classify any Unassigned accounts',
@@ -51,6 +55,7 @@ const SOP_SECTIONS = [
   {
     title: 'End of Day Admin',
     time: 'End of session',
+    emoji: '✅',
     items: [
       'Log completed tasks and update task status',
       'Note any issues or anomalies in activity log',
@@ -61,61 +66,123 @@ const SOP_SECTIONS = [
   },
 ];
 
+function getStreak() {
+  try {
+    const raw = localStorage.getItem('cam-sop-streak');
+    return raw ? JSON.parse(raw) : { count: 0, lastDate: '' };
+  } catch { return { count: 0, lastDate: '' }; }
+}
+
+function updateStreak(today, wasComplete, isNowComplete) {
+  if (!isNowComplete || wasComplete) return;
+  const streak = getStreak();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const newCount = streak.lastDate === yesterdayStr ? streak.count + 1 : 1;
+  localStorage.setItem('cam-sop-streak', JSON.stringify({ count: newCount, lastDate: today }));
+}
+
 export default function DailySOP() {
   const today = new Date().toISOString().slice(0, 10);
   const storageKey = `cam-sop-${today}`;
+  const totalItems = SOP_SECTIONS.reduce((sum, s) => sum + s.items.length, 0);
 
   const [checked, setChecked] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(storageKey) || '{}');
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); }
+    catch { return {}; }
   });
+  const [justCompleted, setJustCompleted] = useState(false);
+  const streak = getStreak();
 
   function toggle(sectionIdx, itemIdx) {
     const key = `${sectionIdx}-${itemIdx}`;
     setChecked((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       localStorage.setItem(storageKey, JSON.stringify(next));
+      const doneCount = Object.values(next).filter(Boolean).length;
+      const wasComplete = Object.values(prev).filter(Boolean).length === totalItems;
+      const isNowComplete = doneCount === totalItems;
+      updateStreak(today, wasComplete, isNowComplete);
+      if (isNowComplete && !wasComplete) setJustCompleted(true);
       return next;
     });
   }
 
   function reset() {
     setChecked({});
+    setJustCompleted(false);
     localStorage.removeItem(storageKey);
   }
 
-  const totalItems = SOP_SECTIONS.reduce((sum, s) => sum + s.items.length, 0);
   const doneItems = Object.values(checked).filter(Boolean).length;
   const pct = totalItems ? Math.round((doneItems / totalItems) * 100) : 0;
+  const isComplete = pct === 100;
+  const currentStreak = streak.lastDate === today ? streak.count : (
+    (() => { const y = new Date(); y.setDate(y.getDate() - 1); return streak.lastDate === y.toISOString().slice(0, 10) ? streak.count : 0; })()
+  );
+
+  // Determine which section is currently active (first incomplete)
+  const activeSectionIdx = SOP_SECTIONS.findIndex((s, sIdx) =>
+    s.items.some((_, iIdx) => !checked[`${sIdx}-${iIdx}`])
+  );
 
   return (
     <div className="daily-sop">
-      <section className="panel">
+      <section className={`panel${isComplete ? ' sop-complete-panel' : ''}`}>
         <div className="panel-heading">
           <h3>Daily CAM Checklist</h3>
           <span className="badge muted">{today}</span>
           <span className="count">{doneItems}/{totalItems}</span>
+          {currentStreak > 1 && (
+            <span className="sop-streak-badge"><Zap size={12} />{currentStreak} day streak</span>
+          )}
           <button className="ghost-button" onClick={reset} title="Reset today's checklist">
             <RotateCcw size={14} /> Reset
           </button>
         </div>
 
         <div className="sop-progress-bar-wrap">
-          <div className="sop-progress-bar" style={{ width: `${pct}%`, background: pct === 100 ? 'var(--green)' : 'var(--blue)' }} />
+          <div
+            className="sop-progress-bar"
+            style={{
+              width: `${pct}%`,
+              background: isComplete
+                ? 'var(--green)'
+                : pct >= 60
+                ? 'linear-gradient(90deg, var(--blue), var(--accent))'
+                : 'var(--blue)',
+              transition: 'width 0.3s ease, background 0.4s ease',
+            }}
+          />
         </div>
-        <div className="sop-progress-label">{pct}% complete</div>
+        <div className="sop-progress-label" style={{ color: isComplete ? 'var(--green)' : undefined }}>
+          {isComplete ? '✓ All done — great work today!' : `${pct}% complete · ${totalItems - doneItems} remaining`}
+        </div>
+
+        {isComplete && justCompleted && (
+          <div className="sop-celebrate">
+            <span>🎉</span>
+            <strong>Day complete!</strong>
+            <span className="muted">All {totalItems} checklist items done.</span>
+            {currentStreak > 1 && <span className="sop-streak-badge"><Zap size={12} />{currentStreak}-day streak!</span>}
+          </div>
+        )}
 
         {SOP_SECTIONS.map((section, sIdx) => {
           const sectionDone = section.items.filter((_, iIdx) => checked[`${sIdx}-${iIdx}`]).length;
+          const sectionComplete = sectionDone === section.items.length;
+          const isActive = sIdx === activeSectionIdx;
           return (
-            <div className="sop-section" key={section.title}>
+            <div className={`sop-section${sectionComplete ? ' sop-section-done' : isActive ? ' sop-section-active' : ''}`} key={section.title}>
               <div className="sop-section-header">
+                <span className="sop-section-emoji">{sectionComplete ? '✅' : section.emoji}</span>
                 <span className="sop-section-title">{section.title}</span>
                 <span className="sop-section-time muted">{section.time}</span>
-                <span className="sop-section-count muted">{sectionDone}/{section.items.length}</span>
+                <span className={`sop-section-count${sectionComplete ? ' positive' : ' muted'}`}>
+                  {sectionDone}/{section.items.length}
+                </span>
+                {sectionComplete && <span className="sop-section-badge">Done</span>}
               </div>
               <ul className="sop-list">
                 {section.items.map((item, iIdx) => {
