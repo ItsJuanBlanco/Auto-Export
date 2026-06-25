@@ -2908,6 +2908,13 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
   const [quickTaskText, setQuickTaskText] = useState('');
   const [quickTaskDue, setQuickTaskDue] = useState('');
   const [quickTaskPriority, setQuickTaskPriority] = useState('Normal');
+  const goalKey = `cam-monthly-goal-${camName}`;
+  const [monthlyGoal, setMonthlyGoal] = useState(() => { try { return Number(localStorage.getItem(goalKey) || 0); } catch { return 0; } });
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalDraft, setGoalDraft] = useState('');
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const monthlyPnl = clients.reduce((sum, c) => sum + (c.dailyImports || []).filter(di => di.date?.startsWith(currentMonth)).reduce((s, di) => s + (di.snapshots || []).reduce((ss, sn) => ss + Number(sn.grossRealizedPnl || 0), 0), 0), 0);
+  const goalPct = monthlyGoal > 0 ? Math.min(100, Math.round((monthlyPnl / monthlyGoal) * 100)) : null;
   const overview = buildCamOverview(clients, strategySetRecords);
   const displayName = camName || 'this workspace';
   const briefing = buildTodayBriefing(clients);
@@ -2961,6 +2968,27 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
               </strong>
             </div>
           )}
+          <div className="metric" style={{minWidth:160,textAlign:'right'}}>
+            <span style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:6}}>
+              Monthly goal
+              <button className="ghost-button" style={{fontSize:10,padding:'1px 5px'}} onClick={() => { setGoalDraft(monthlyGoal || ''); setEditingGoal(true); }}>Edit</button>
+            </span>
+            {editingGoal ? (
+              <form style={{display:'flex',gap:4,justifyContent:'flex-end'}} onSubmit={e => { e.preventDefault(); const v = Number(goalDraft); setMonthlyGoal(v); try { localStorage.setItem(goalKey, String(v)); } catch {} setEditingGoal(false); }}>
+                <input autoFocus type="number" value={goalDraft} onChange={e => setGoalDraft(e.target.value)} placeholder="e.g. 10000" style={{width:90,fontSize:12,padding:'2px 6px',background:'var(--surface-2)',border:'1px solid var(--line)',borderRadius:4,color:'var(--text)'}} />
+                <button type="submit" className="primary-button" style={{padding:'2px 8px',fontSize:11}}>Set</button>
+                <button type="button" className="ghost-button" style={{fontSize:11}} onClick={() => setEditingGoal(false)}>✕</button>
+              </form>
+            ) : monthlyGoal > 0 ? (
+              <>
+                <strong className={monthlyPnl >= monthlyGoal ? 'positive' : ''} style={{fontSize:16}}>{formatCurrency(monthlyPnl)} / {formatCurrency(monthlyGoal)}</strong>
+                <div style={{marginTop:4,background:'var(--line)',borderRadius:4,height:5,width:160}}>
+                  <div style={{height:'100%',width:`${goalPct}%`,background:goalPct >= 100 ? 'var(--green)' : 'var(--accent)',borderRadius:4,transition:'width .4s'}} />
+                </div>
+                <small className={goalPct >= 100 ? 'positive' : 'muted'}>{goalPct}% of goal</small>
+              </>
+            ) : <small className="muted">No goal set</small>}
+          </div>
         </div>
       </div>
 
