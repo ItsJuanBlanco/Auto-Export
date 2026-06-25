@@ -1144,6 +1144,20 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             <div className="panel-heading">
               <h3>All funded accounts</h3>
               <span className="badge muted">{allFunded.length} accounts</span>
+              <button className="ghost-button" style={{marginLeft:'auto'}} title="Export to CSV" onClick={() => {
+                const headers = ['Account','Alias','Client','CAM','Strategies','Daily PnL','Weekly PnL','Buffer','Buffer %','Target %','Payout State'];
+                const rows = allFunded.map(r => [
+                  r.accountName, r.alias, r.clientName, r.camName, r.strategies,
+                  r.dailyPnl.toFixed(2), r.weeklyPnl.toFixed(2),
+                  r.buffer.toFixed(2), r.bufferPct !== null ? r.bufferPct : '',
+                  r.targetPct !== null ? r.targetPct : '', r.payoutState || '',
+                ]);
+                const csv = [headers, ...rows].map(row => row.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                a.download = `funded-accounts-${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+              }}><Download size={14} /> Export CSV</button>
             </div>
             <div className="table-wrap">
               <table className="ops-table">
