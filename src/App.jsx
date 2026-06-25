@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Edit3,
   FileText,
   Lock,
   LogOut,
@@ -59,6 +60,7 @@ import {
   addUser,
   authenticateUser,
   deleteUser,
+  updateUser,
   loadUsers,
   saveUsers,
 } from './domain/userStore';
@@ -983,7 +985,9 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
 
 function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onLogout, users = [], onUsersChange, session }) {
   const [newCamName, setNewCamName] = useState('');
-  const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', role: USER_ROLES.CAM, camProfileId: '' });
+  const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', email: '', role: USER_ROLES.CAM, camProfileId: '' });
+  const [editUserId, setEditUserId] = useState(null);
+  const [editUserPatch, setEditUserPatch] = useState({});
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [teamCopyDone, setTeamCopyDone] = useState(false);
   const [fundedSort, setFundedSort] = useState({ col: 'buffer', dir: -1 });
@@ -1018,7 +1022,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     event.preventDefault();
     if (!newUser.username || !newUser.password || !newUser.displayName) return;
     onUsersChange(addUser(users, newUser));
-    setNewUser({ username: '', password: '', displayName: '', role: USER_ROLES.CAM, camProfileId: '' });
+    setNewUser({ username: '', password: '', displayName: '', email: '', role: USER_ROLES.CAM, camProfileId: '' });
+  }
+
+  function saveUserEdit(userId) {
+    onUsersChange(updateUser(users, userId, editUserPatch));
+    setEditUserId(null);
+    setEditUserPatch({});
   }
 
   return (
@@ -1433,32 +1443,50 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             <div className="panel-heading"><h3>Users &amp; Access</h3><Shield size={16} /></div>
             <div className="table-wrap">
               <table className="ops-table">
-                <thead><tr><th>Display name</th><th>Username</th><th>Role</th><th>CAM profile</th><th>Action</th></tr></thead>
+                <thead><tr><th>Display name</th><th>Username</th><th>Email</th><th>Role</th><th>CAM profile</th><th>Password</th><th></th></tr></thead>
                 <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id}>
-                      <td>{u.displayName}</td>
-                      <td><code>{u.username}</code></td>
-                      <td><span className={u.role === USER_ROLES.MANAGER ? 'badge success' : 'badge muted'}>{u.role}</span></td>
-                      <td>{u.camProfileId ? camProfiles.find((p) => p.id === u.camProfileId)?.name || u.camProfileId : '—'}</td>
-                      <td>
-                        <button
-                          className="ghost-button"
-                          disabled={u.role === USER_ROLES.MANAGER}
-                          onClick={() => onUsersChange(deleteUser(users, u.id))}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {users.map((u) => {
+                    const isEditing = editUserId === u.id;
+                    return (
+                      <tr key={u.id}>
+                        <td>{u.displayName}</td>
+                        <td><code>{u.username}</code></td>
+                        <td>{isEditing
+                          ? <input style={{width:180}} value={editUserPatch.email ?? u.email ?? ''} onChange={e => setEditUserPatch(p => ({...p, email: e.target.value}))} placeholder="email@company.com" />
+                          : <span className="muted">{u.email || '—'}</span>}
+                        </td>
+                        <td><span className={u.role === USER_ROLES.MANAGER ? 'badge success' : 'badge muted'}>{u.role}</span></td>
+                        <td>{u.camProfileId ? camProfiles.find((p) => p.id === u.camProfileId)?.name || u.camProfileId : '—'}</td>
+                        <td>{isEditing
+                          ? <input style={{width:130}} type="text" value={editUserPatch.password ?? ''} onChange={e => setEditUserPatch(p => ({...p, password: e.target.value}))} placeholder="New password" />
+                          : <span className="muted">••••••</span>}
+                        </td>
+                        <td style={{display:'flex',gap:4}}>
+                          {isEditing ? (
+                            <>
+                              <button className="primary-button" style={{fontSize:12,padding:'2px 8px'}} onClick={() => saveUserEdit(u.id)}>Save</button>
+                              <button className="ghost-button" onClick={() => { setEditUserId(null); setEditUserPatch({}); }}>Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="ghost-button" title="Edit" onClick={() => { setEditUserId(u.id); setEditUserPatch({}); }}><Edit3 size={13} /></button>
+                              <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER} title="Delete user" onClick={() => { if(window.confirm(`Delete user "${u.displayName}"?`)) onUsersChange(deleteUser(users, u.id)); }}>
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <form className="user-create-form" onSubmit={submitNewUser}>
-              <input placeholder="Display name" value={newUser.displayName} onChange={(e) => setNewUser((v) => ({ ...v, displayName: e.target.value }))} />
-              <input placeholder="Username" value={newUser.username} onChange={(e) => setNewUser((v) => ({ ...v, username: e.target.value }))} />
-              <input placeholder="Password" value={newUser.password} onChange={(e) => setNewUser((v) => ({ ...v, password: e.target.value }))} />
+              <input required placeholder="Display name *" value={newUser.displayName} onChange={(e) => setNewUser((v) => ({ ...v, displayName: e.target.value }))} />
+              <input required placeholder="Username *" value={newUser.username} onChange={(e) => setNewUser((v) => ({ ...v, username: e.target.value }))} />
+              <input type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser((v) => ({ ...v, email: e.target.value }))} />
+              <input required placeholder="Password *" value={newUser.password} onChange={(e) => setNewUser((v) => ({ ...v, password: e.target.value }))} />
               <select value={newUser.role} onChange={(e) => setNewUser((v) => ({ ...v, role: e.target.value }))}>
                 {Object.values(USER_ROLES).map((r) => <option key={r}>{r}</option>)}
               </select>

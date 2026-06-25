@@ -6,12 +6,12 @@ export const USER_ROLES = {
 };
 
 const DEFAULT_USERS = [
-  { id: 'user-manager', username: 'manager', password: 'demo', role: USER_ROLES.MANAGER, displayName: 'Manager', camProfileId: null },
-  { id: 'user-pedro', username: 'pedro', password: 'pedro123', role: USER_ROLES.CAM, displayName: 'Pedro', camProfileId: 'am-pedro' },
-  { id: 'user-amanda', username: 'amanda', password: 'amanda123', role: USER_ROLES.CAM, displayName: 'Amanda', camProfileId: 'am-amanda' },
-  { id: 'user-juan', username: 'juan', password: 'juan123', role: USER_ROLES.CAM, displayName: 'Juan Pablo', camProfileId: 'am-juan' },
-  { id: 'user-ed', username: 'ed', password: 'ed123', role: USER_ROLES.CAM, displayName: 'Ed', camProfileId: 'am-ed' },
-  { id: 'user-sarah', username: 'sarah', password: 'sarah123', role: USER_ROLES.CAM, displayName: 'Sarah', camProfileId: 'am-sarah' },
+  { id: 'user-manager', username: 'manager', password: 'demo', role: USER_ROLES.MANAGER, displayName: 'Manager', email: 'manager@vinceretrading.com', camProfileId: null },
+  { id: 'user-pedro', username: 'pedro', password: 'pedro123', role: USER_ROLES.CAM, displayName: 'Pedro', email: 'pedro@vinceretrading.com', camProfileId: 'am-pedro' },
+  { id: 'user-amanda', username: 'amanda', password: 'amanda123', role: USER_ROLES.CAM, displayName: 'Amanda', email: 'amanda@vinceretrading.com', camProfileId: 'am-amanda' },
+  { id: 'user-juan', username: 'juan', password: 'juan123', role: USER_ROLES.CAM, displayName: 'Juan Pablo', email: 'juan@vinceretrading.com', camProfileId: 'am-juan' },
+  { id: 'user-ed', username: 'ed', password: 'ed123', role: USER_ROLES.CAM, displayName: 'Ed', email: 'ed@vinceretrading.com', camProfileId: 'am-ed' },
+  { id: 'user-sarah', username: 'sarah', password: 'sarah123', role: USER_ROLES.CAM, displayName: 'Sarah', email: 'sarah@vinceretrading.com', camProfileId: 'am-sarah' },
 ];
 
 export function loadUsers() {
