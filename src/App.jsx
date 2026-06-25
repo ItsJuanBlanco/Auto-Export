@@ -1075,6 +1075,49 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
 
         <InsightFeedPanel insights={managerInsights} onSelectClient={onOpenCam} />
 
+        {(() => {
+          const allFlags = clients.flatMap(c =>
+            (c.dailyImports || []).flatMap(di =>
+              (di.flags || [])
+                .filter(f => f.status !== 'Resolved')
+                .map(f => {
+                  const cam = camProfiles.find(p => (p.clientIds || []).includes(c.id));
+                  return { ...f, clientName: c.name, clientId: c.id, camId: cam?.id, camName: cam?.name, date: di.date };
+                })
+            )
+          ).sort((a, b) => {
+            if (a.severity === 'Critical' && b.severity !== 'Critical') return -1;
+            if (b.severity === 'Critical' && a.severity !== 'Critical') return 1;
+            return (b.date || '').localeCompare(a.date || '');
+          });
+          if (!allFlags.length) return null;
+          const critCount = allFlags.filter(f => f.severity === 'Critical').length;
+          return (
+            <section className="panel">
+              <div className="panel-heading">
+                <h3>Open flags — all clients</h3>
+                <span className={`badge ${critCount ? 'danger' : 'warning'}`}>{allFlags.length} open{critCount ? ` · ${critCount} critical` : ''}</span>
+              </div>
+              <div className="ops-table-wrap">
+                <table className="ops-table">
+                  <thead><tr><th>Client</th><th>CAM</th><th>Date</th><th>Severity</th><th>Flag</th></tr></thead>
+                  <tbody>
+                    {allFlags.map((f, i) => (
+                      <tr key={i} style={f.severity === 'Critical' ? {background:'var(--red-dim, rgba(239,68,68,.06))'} : undefined}>
+                        <td><button className="link-button" onClick={() => onOpenCam(f.camId, f.clientId)}>{f.clientName}</button></td>
+                        <td className="muted">{f.camName || '—'}</td>
+                        <td className="muted">{f.date}</td>
+                        <td><span className={`badge ${f.severity === 'Critical' ? 'danger' : 'warning'}`}>{f.severity}</span></td>
+                        <td>{f.message || f.type || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          );
+        })()}
+
         <section className="panel">
           <div className="panel-heading">
             <h3>Account managers</h3>
@@ -2866,7 +2909,7 @@ function MovementSparkline({ points = [] }) {
   );
 }
 
-const ACTIVITY_TYPES = ['Note', 'Call', 'Payout', 'Alert', 'Email', 'Other'];
+const ACTIVITY_TYPES = ['Note', 'Call', 'Message', 'Disconnection', 'Payout', 'Alert', 'Email', 'Other'];
 
 function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
   const [text, setText] = useState('');

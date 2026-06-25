@@ -330,6 +330,7 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .primary-button { background: var(--blue); border-color: var(--blue); color: #06101a; font-weight: 800; }
 .secondary-button { background: var(--surface-2); }
 .ghost-button { background: transparent; }
+.link-button { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
 .tabs {
   display: flex;
