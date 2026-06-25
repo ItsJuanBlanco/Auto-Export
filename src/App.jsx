@@ -1035,6 +1035,9 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
 
 function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onAddClient, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag, teamAnnouncement = '', onSetAnnouncement }) {
   const [newCamName, setNewCamName] = useState('');
+  const [newCamUsername, setNewCamUsername] = useState('');
+  const [newCamPassword, setNewCamPassword] = useState('');
+  const [showCamUserFields, setShowCamUserFields] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', email: '', role: USER_ROLES.CAM, camProfileId: '' });
   const [editUserId, setEditUserId] = useState(null);
   const [editUserPatch, setEditUserPatch] = useState({});
@@ -1119,8 +1122,9 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
 
   function submitCam(event) {
     event.preventDefault();
-    onCreateCam(newCamName);
-    setNewCamName('');
+    if (!newCamName.trim()) return;
+    onCreateCam(newCamName.trim(), newCamUsername.trim(), newCamPassword.trim());
+    setNewCamName(''); setNewCamUsername(''); setNewCamPassword(''); setShowCamUserFields(false);
   }
 
   function submitNewUser(event) {
@@ -1474,11 +1478,16 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
         <section className="panel">
           <div className="panel-heading">
             <h3>Account managers</h3>
-            <form className="inline-create-form" onSubmit={submitCam}>
-              <input value={newCamName} placeholder="New CAM name" onChange={(event) => setNewCamName(event.target.value)} />
-              <button className="secondary-button"><Plus size={14} /> Create</button>
-            </form>
           </div>
+          <form className="inline-create-form" style={{flexWrap:'wrap',marginBottom:8}} onSubmit={submitCam}>
+            <input value={newCamName} placeholder="CAM display name" onChange={e => setNewCamName(e.target.value)} style={{minWidth:140}} />
+            {showCamUserFields && <>
+              <input value={newCamUsername} placeholder="username" onChange={e => setNewCamUsername(e.target.value)} style={{minWidth:110}} />
+              <input type="password" value={newCamPassword} placeholder="password" onChange={e => setNewCamPassword(e.target.value)} style={{minWidth:110}} />
+            </>}
+            <button type="button" className="ghost-button" style={{fontSize:11}} onClick={() => setShowCamUserFields(v => !v)}>{showCamUserFields ? '− no login' : '+ login'}</button>
+            <button className="secondary-button" disabled={!newCamName.trim()}><Plus size={14} /> Create</button>
+          </form>
           <div className="cam-card-grid">
             {cams.map((cam) => (
               <button className="cam-card live" key={cam.id || cam.name} onClick={() => onOpenCam(cam.id)}>
@@ -4653,7 +4662,21 @@ export default function App() {
         camProfiles={state.camProfiles}
         onOpenCam={openCamWorkspace}
         onLoadDemo={() => setState(createDemoState())}
-        onCreateCam={(name) => setState((current) => addCamProfile(current, name))}
+        onCreateCam={(name, username, password) => {
+          setState((current) => addCamProfile(current, name));
+          if (username && password) {
+            const newProfile = addCamProfile({ camProfiles: [] }, name).camProfiles[0];
+            // Find the newly created profile by name after state settles
+            setState((current) => {
+              const profile = (current.camProfiles || []).find(p => p.name === name);
+              if (!profile) return current;
+              const already = (users || []).find(u => u.username?.toLowerCase() === username.toLowerCase());
+              if (already) return current;
+              setUsers(u => addUser(u, { username, password, displayName: name, email: '', role: USER_ROLES.CAM, camProfileId: profile.id }));
+              return current;
+            });
+          }
+        }}
         onLogout={() => setSession(null)}
         users={users}
         onUsersChange={setUsers}
