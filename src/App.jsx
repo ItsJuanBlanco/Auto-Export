@@ -2119,7 +2119,8 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
 function MonthlyReportPanel({ client, month, onClose }) {
   const [copied, setCopied] = useState(false);
   // month = 'YYYY-MM'
-  const registry = client?.accountRegistry || {};
+  const lastMonthImport = (client?.dailyImports || []).filter((di) => di.date?.startsWith(month)).at(-1);
+  const registry = mergeRegistryCi(lastMonthImport?.accounts, client?.accountRegistry);
   const monthImports = (client?.dailyImports || []).filter((di) => di.date?.startsWith(month));
   const allDays = monthImports.map((di) => {
     const pnl = (di.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0);
@@ -2135,7 +2136,7 @@ function MonthlyReportPanel({ client, month, onClose }) {
   const accountMap = {};
   for (const di of monthImports) {
     for (const snap of di.snapshots || []) {
-      const meta = registry[snap.accountName] || {};
+      const meta = ciMeta(registry, snap.accountName);
       if (meta.accountType === 'Inactive / Ignore') continue;
       if (!accountMap[snap.accountName]) {
         accountMap[snap.accountName] = { alias: meta.alias || snap.accountName, type: meta.accountType || '', pnl: 0, days: 0, winDays: 0 };
