@@ -3496,6 +3496,27 @@ export default function App() {
     setState((current) => updateImportStatus(current, selectedClient.id, dailyImport.id, 'Needs review'));
   }
 
+  function closeAllToday() {
+    const today = todayIsoDate();
+    const toClose = currentCamClients.filter(c => {
+      const imp = getClientImportByDate(c, today);
+      return imp && imp.status !== 'Closed';
+    });
+    if (!toClose.length) { window.alert('No open imports for today — all clients are already closed or have no upload.'); return; }
+    const critCount = toClose.reduce((n, c) => {
+      const imp = getClientImportByDate(c, today);
+      return n + (imp?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved').length;
+    }, 0);
+    const msg = critCount
+      ? `Close today for ${toClose.length} client${toClose.length !== 1 ? 's' : ''}? There are ${critCount} unresolved critical flag${critCount !== 1 ? 's' : ''} across these clients.`
+      : `Close today for ${toClose.length} client${toClose.length !== 1 ? 's' : ''}?`;
+    if (!window.confirm(msg)) return;
+    setState(current => toClose.reduce((s, c) => {
+      const imp = getClientImportByDate(c, today);
+      return imp ? updateImportStatus(s, c.id, imp.id, 'Closed') : s;
+    }, current));
+  }
+
   function recalculateImport() {
     if (!selectedClient || !dailyImport) return;
     const recalculated = recalculateDailyImport({
@@ -3727,6 +3748,12 @@ export default function App() {
                   {dailyImport?.status === 'Closed'
                     ? <button className="ghost-button" onClick={reopenImport}><RefreshCw size={16} /> Reopen Day</button>
                     : <button className="ghost-button" disabled={!dailyImport} onClick={closeImport}><CheckCircle2 size={16} /> Close Day</button>}
+                  {(() => {
+                    const today = todayIsoDate();
+                    const openToday = currentCamClients.filter(c => { const imp = getClientImportByDate(c, today); return imp && imp.status !== 'Closed'; });
+                    if (openToday.length < 2) return null;
+                    return <button className="ghost-button" onClick={closeAllToday} title="Close today for all clients that have an upload"><CheckCircle2 size={16} /> Close all ({openToday.length})</button>;
+                  })()}
 
                 </div>
               </div>
