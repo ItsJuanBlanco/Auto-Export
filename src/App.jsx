@@ -3008,10 +3008,10 @@ function buildPortfolioInsights(clients, allClients = []) {
   const today = todayIsoDate();
 
   for (const client of clients) {
-    const registry = client.accountRegistry || {};
     const latest = client.dailyImports?.at(-1);
     const snapshots = latest?.snapshots || [];
     const imports = client.dailyImports || [];
+    const registryCi = mergeRegistryCi(latest?.accounts, client.accountRegistry);
 
     // Helper: compute remaining buffer from a snapshot + meta
     function remainingBuffer(s, m) {
@@ -3022,7 +3022,7 @@ function buildPortfolioInsights(clients, allClients = []) {
 
     // 1. Drawdown velocity — project breach date from last 7-day buffer consumption
     for (const snap of snapshots) {
-      const meta = registry[snap.accountName] || {};
+      const meta = ciMeta(registryCi, snap.accountName);
       if (meta.accountType !== 'Funded') continue;
       if (meta.status === 'Failed' || meta.status === 'Inactive') continue;
 
@@ -3089,9 +3089,8 @@ function buildPortfolioInsights(clients, allClients = []) {
 
     // 4. Strategy cooling — algo was positive last week, now negative 3+ days
     if (latest) {
-      const latestRegistryCi = mergeRegistryCi(latest.accounts, registry);
       for (const snap of snapshots) {
-        const meta = ciMeta(latestRegistryCi, snap.accountName);
+        const meta = ciMeta(registryCi, snap.accountName);
         if (!['Funded', 'Evaluation - Standard'].includes(meta.accountType)) continue;
         const enabledStrats = (snap.strategies || []).filter(s => s.enabled);
         if (!enabledStrats.length) continue;
