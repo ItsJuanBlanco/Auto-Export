@@ -3698,17 +3698,18 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
         <h3>Activity log</h3><span className="count">{log.length}</span>
         {log.length > 0 && (
           <button className="ghost-button" style={{fontSize:11,marginLeft:'auto'}} onClick={() => {
-            const rows = [['Date','Type','Account','Text']];
+            const csvCell = v => `"${String(v||'').replace(/"/g,'""').replace(/\r?\n/g,' ')}"`;
+            const rows = [['Date','Type','Account','Text'].map(csvCell).join(',')];
             [...log].sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||'')).forEach(e => {
               const acct = Object.values(client.accountRegistry||{}).find(a=>a.accountName===e.accountName);
               rows.push([
                 (e.createdAt||'').slice(0,16).replace('T',' '),
                 e.type||'Note',
                 acct?.alias||e.accountName||'',
-                `"${(e.text||'').replace(/"/g,'""')}"`,
-              ]);
+                e.text||'',
+              ].map(csvCell).join(','));
             });
-            const csv = rows.map(r=>r.join(',')).join('\n');
+            const csv = rows.join('\n');
             const a = document.createElement('a');
             a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
             a.download = `activity-${client.name.replace(/\s+/g,'-')}-${new Date().toISOString().slice(0,10)}.csv`;
