@@ -544,6 +544,13 @@ export function updateClientDetails(state, clientId, patch) {
   }));
 }
 
+export function updateCamProfile(state, camId, patch) {
+  return {
+    ...state,
+    camProfiles: (state.camProfiles || []).map(p => p.id === camId ? { ...p, ...patch } : p),
+  };
+}
+
 export function togglePinClient(state, clientId) {
   return updateClient(state, clientId, (client) => ({ ...client, pinned: !client.pinned }));
 }

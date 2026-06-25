@@ -54,6 +54,7 @@ import {
   updateTask,
   upsertAccountMeta,
   getStorageUsageKB,
+  updateCamProfile,
 } from './domain/demoStore';
 import { buildCamOverview } from './domain/camOverview';
 import { recalculateDailyImport, reconcileDailyImport } from './domain/reconcile';
@@ -3112,7 +3113,7 @@ function buildIncomeProjection(clients = []) {
   return rows.sort((a, b) => b.pct - a.pct);
 }
 
-function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask }) {
+function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask, monthlyGoal: monthlyGoalProp = 0, onSetMonthlyGoal }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
   const [showBulkTask, setShowBulkTask] = useState(false);
   const [bulkTaskText, setBulkTaskText] = useState('');
@@ -3123,8 +3124,7 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
   const [quickTaskText, setQuickTaskText] = useState('');
   const [quickTaskDue, setQuickTaskDue] = useState('');
   const [quickTaskPriority, setQuickTaskPriority] = useState('Normal');
-  const goalKey = `cam-monthly-goal-${camName}`;
-  const [monthlyGoal, setMonthlyGoal] = useState(() => { try { return Number(localStorage.getItem(goalKey) || 0); } catch { return 0; } });
+  const monthlyGoal = monthlyGoalProp;
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -3198,7 +3198,7 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
               <button className="ghost-button" style={{fontSize:10,padding:'1px 5px'}} onClick={() => { setGoalDraft(monthlyGoal || ''); setEditingGoal(true); }}>Edit</button>
             </span>
             {editingGoal ? (
-              <form style={{display:'flex',gap:4,justifyContent:'flex-end'}} onSubmit={e => { e.preventDefault(); const v = Number(goalDraft); setMonthlyGoal(v); try { localStorage.setItem(goalKey, String(v)); } catch {} setEditingGoal(false); }}>
+              <form style={{display:'flex',gap:4,justifyContent:'flex-end'}} onSubmit={e => { e.preventDefault(); const v = Number(goalDraft); onSetMonthlyGoal?.(v); setEditingGoal(false); }}>
                 <input autoFocus type="number" value={goalDraft} onChange={e => setGoalDraft(e.target.value)} placeholder="e.g. 10000" style={{width:90,fontSize:12,padding:'2px 6px',background:'var(--surface-2)',border:'1px solid var(--line)',borderRadius:4,color:'var(--text)'}} />
                 <button type="submit" className="primary-button" style={{padding:'2px 8px',fontSize:11}}>Set</button>
                 <button type="button" className="ghost-button" style={{fontSize:11}} onClick={() => setEditingGoal(false)}>✕</button>
@@ -4788,6 +4788,8 @@ export default function App() {
             setShowOverview(false); setShowSOP(false);
           }}
           onAddClientTask={(clientId, task) => setState((current) => addTask(current, clientId, task))}
+          monthlyGoal={currentCamProfile?.monthlyGoal || 0}
+          onSetMonthlyGoal={goal => setState(s => updateCamProfile(s, currentCamProfile?.id, { monthlyGoal: goal }))}
         />
         </>
       ) : (
