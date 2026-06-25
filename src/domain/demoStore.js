@@ -224,7 +224,7 @@ export function createDemoState() {
       id: 'client-todd',
       name: 'Todd',
       registry: {
-        TODD5505: { accountName: 'TODD5505', alias: 'BlueSky - 5505', connection: 'BlueSky', accountType: 'Funded', status: 'Payout Hold', payoutState: 'Payout requested', targetProfit: 52000, maxDrawdownLimit: 2500, dateAdded: '2026-03-05', dateFunded: '2026-03-18', payoutCount: 1, dateLastPayout: '2026-04-20' },
+        TODD5505: { accountName: 'TODD5505', alias: 'BlueSky - 5505', connection: 'BlueSky', accountType: 'Funded', status: 'Payout Hold', payoutState: 'Payout requested', targetProfit: 52000, startBalance: 50000, maxDrawdownLimit: 2500, dateAdded: '2026-03-05', dateFunded: '2026-03-18', payoutCount: 1, dateLastPayout: '2026-04-20' },
         TODD7712: { accountName: 'TODD7712', alias: 'Apex - 7712', connection: 'Apex', accountType: 'Evaluation - Bullet Bot', status: 'Active', payoutState: 'Not requested', bulletBotPassType: '1 Day Pass', bulletBotDirection: 'Long', maxDrawdownLimit: 1000, dateAdded: '2026-06-20' },
         TODD7713: { accountName: 'TODD7713', alias: 'Apex - 7713', connection: 'Apex', accountType: 'Evaluation - Bullet Bot', status: 'Failed', payoutState: 'Not requested', bulletBotPassType: '3 Day Pass', bulletBotDirection: 'Short', maxDrawdownLimit: 1500, dateAdded: '2026-06-15', dateFailed: '2026-06-24' },
       },

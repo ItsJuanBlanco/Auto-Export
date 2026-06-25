@@ -839,6 +839,53 @@ function buildCamPerformance(clients = [], camProfiles = []) {
   return Object.values(camMap).sort((a, b) => b.weeklyPnl - a.weeklyPnl);
 }
 
+function buildAllFundedAccounts(clients = [], camProfiles = []) {
+  const clientCam = {};
+  for (const cam of camProfiles) {
+    for (const id of cam.clientIds || []) clientCam[id] = cam.name;
+  }
+  const rows = [];
+  for (const client of clients) {
+    const latest = client.dailyImports?.at(-1);
+    if (!latest) continue;
+    const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
+    for (const snap of latest.snapshots || []) {
+      const meta = registry[snap.accountName] || {};
+      if (meta.accountType !== 'Funded') continue;
+      const ddLimit = Number(meta.maxDrawdownLimit || 0);
+      const rawDD = Number(snap.trailingMaxDrawdown || 0);
+      const buffer = ddLimit > 0 ? ddLimit - Math.abs(rawDD) : rawDD;
+      const bufferPct = ddLimit > 0 ? Math.round((buffer / ddLimit) * 100) : null;
+      const target = Number(meta.targetProfit || 0);
+      const start = Number(meta.startBalance || 0);
+      const balance = Number(snap.accountBalance || 0);
+      const profit = start ? balance - start : null;
+      const targetPct = (target && start) ? Math.min(100, Math.round(((balance - start) / (target - start)) * 100)) : null;
+      rows.push({
+        clientId: client.id,
+        clientName: client.name,
+        camName: clientCam[client.id] || '—',
+        accountName: snap.accountName,
+        alias: meta.alias || snap.accountName,
+        connection: meta.connection || '',
+        payoutState: meta.payoutState || '',
+        strategies: (snap.strategies || []).filter((s) => s.enabled).map((s) => s.strategyFamily || s.strategyName).join(', ') || 'None',
+        dailyPnl: Number(snap.grossRealizedPnl || 0),
+        weeklyPnl: Number(snap.weeklyPnl || 0),
+        balance,
+        buffer,
+        bufferPct,
+        profit,
+        targetPct,
+        target,
+        status: meta.status || '',
+      });
+    }
+  }
+  rows.sort((a, b) => (a.bufferPct !== null && b.bufferPct !== null ? a.bufferPct - b.bufferPct : 0));
+  return rows;
+}
+
 function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onLogout, users = [], onUsersChange, session }) {
   const [newCamName, setNewCamName] = useState('');
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', role: USER_ROLES.CAM, camProfileId: '' });
@@ -862,6 +909,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   const riskDist = buildRiskDistribution(clients, camProfiles);
   const camPerf = buildCamPerformance(clients, camProfiles);
   const managerInsights = buildPortfolioInsights(clients, clients);
+  const allFunded = buildAllFundedAccounts(clients, camProfiles);
 
   function submitCam(event) {
     event.preventDefault();
@@ -944,6 +992,49 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             ))}
           </div>
         </section>
+
+        {allFunded.length > 0 && (
+          <section className="panel">
+            <div className="panel-heading">
+              <h3>All funded accounts</h3>
+              <span className="badge muted">{allFunded.length} accounts · sorted by drawdown risk</span>
+            </div>
+            <div className="table-wrap">
+              <table className="ops-table">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Client</th>
+                    <th>CAM</th>
+                    <th>Strategies</th>
+                    <th>Daily PnL</th>
+                    <th>Weekly PnL</th>
+                    <th>Buffer</th>
+                    <th>Target</th>
+                    <th>Payout</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allFunded.map((row) => (
+                    <tr key={row.accountName} className={row.bufferPct !== null && row.bufferPct <= 20 ? 'row-highlight' : ''} style={{cursor:'pointer'}} onClick={() => onOpenCam(camProfiles.find(c => c.clientIds?.includes(row.clientId))?.id)}>
+                      <td><strong>{row.alias}</strong><small>{row.connection}</small></td>
+                      <td>{row.clientName}</td>
+                      <td><small>{row.camName}</small></td>
+                      <td><small>{row.strategies}</small></td>
+                      <td className={row.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.dailyPnl)}</td>
+                      <td className={row.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.weeklyPnl)}</td>
+                      <td className={row.bufferPct !== null ? (row.bufferPct <= 20 ? 'negative' : row.bufferPct <= 50 ? '' : 'positive') : ''}>
+                        {row.bufferPct !== null ? `${formatCurrency(row.buffer)} (${row.bufferPct}%)` : row.buffer > 0 ? formatCurrency(row.buffer) : '—'}
+                      </td>
+                      <td>{row.targetPct !== null ? <div className="target-progress" style={{minWidth:80}}><div className="target-bar"><i style={{width:`${row.targetPct}%`,background:row.targetPct>=100?'var(--green)':row.targetPct>=80?'#f59e0b':'var(--accent)'}}/></div><small>{row.targetPct}%</small></div> : '—'}</td>
+                      <td><small className={row.payoutState === 'Clear to trade' ? 'positive' : row.payoutState?.includes('requested') ? '' : 'muted'}>{row.payoutState || '—'}</small></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         <section className="panel">
           <div className="panel-heading"><h3>7-day team history</h3><span className="badge muted">Historical closes</span></div>
