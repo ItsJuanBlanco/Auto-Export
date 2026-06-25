@@ -300,6 +300,65 @@ function buildStrategyAnalyzer(clients = []) {
   })).sort((a, b) => b.totalRealized - a.totalRealized);
 }
 
+// Full historical strategy effectiveness — aggregates across all dailyImports
+function buildStrategyEffectiveness(clients = []) {
+  // stratName → { totalPnl, days: [{date,pnl}], winDays, lossDays, accountSet, clientSet, last7Pnl }
+  const stratMap = new Map();
+
+  for (const client of clients) {
+    for (const di of client.dailyImports || []) {
+      for (const snapshot of di.snapshots || []) {
+        const enabledCount = (snapshot.strategies || []).filter((s) => s.enabled).length || 1;
+        for (const strategy of snapshot.strategies || []) {
+          if (!strategy.enabled) continue;
+          const key = strategy.strategyFamily || strategy.strategyName || 'Unknown';
+          const realized = Number(strategy.realized || 0);
+          const accountContrib = Number(snapshot.grossRealizedPnl || 0) / enabledCount;
+          if (!stratMap.has(key)) {
+            stratMap.set(key, { name: key, totalPnl: 0, contributions: [], winDays: 0, lossDays: 0, accountSet: new Set(), clientSet: new Set() });
+          }
+          const entry = stratMap.get(key);
+          entry.totalPnl += realized || accountContrib;
+          entry.contributions.push({ date: di.date, pnl: realized || accountContrib });
+          if ((realized || accountContrib) > 0) entry.winDays += 1;
+          else if ((realized || accountContrib) < 0) entry.lossDays += 1;
+          entry.accountSet.add(snapshot.accountName);
+          entry.clientSet.add(client.name);
+        }
+      }
+    }
+  }
+
+  const cutoff7 = new Date();
+  cutoff7.setDate(cutoff7.getDate() - 7);
+  const cutoff7Str = cutoff7.toISOString().slice(0, 10);
+
+  return [...stratMap.values()].map((e) => {
+    const last7 = e.contributions.filter((c) => c.date >= cutoff7Str).reduce((s, c) => s + c.pnl, 0);
+    const total = e.winDays + e.lossDays;
+    const winRate = total ? Math.round((e.winDays / total) * 100) : 0;
+    const avgPerDay = total ? e.totalPnl / total : 0;
+    // trend: last7 vs prior 7
+    const cutoff14Str = new Date(cutoff7.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+    const prior7 = e.contributions.filter((c) => c.date >= cutoff14Str && c.date < cutoff7Str).reduce((s, c) => s + c.pnl, 0);
+    const trend = last7 - prior7;
+    return {
+      name: e.name,
+      totalPnl: e.totalPnl,
+      last7Pnl: last7,
+      prior7Pnl: prior7,
+      trend,
+      winDays: e.winDays,
+      lossDays: e.lossDays,
+      winRate,
+      avgPerDay,
+      accounts: e.accountSet.size,
+      clients: e.clientSet.size,
+      days: total,
+    };
+  }).sort((a, b) => b.totalPnl - a.totalPnl);
+}
+
 function buildLifecycleMetrics(clients = []) {
   const evalFails = [];
   const evalFunded = [];
@@ -607,6 +666,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   }), { clients: 0, accounts: 0, weeklyPnl: 0, dailyPnl: 0, flags: 0 });
 
   const strategies = buildStrategyAnalyzer(clients);
+  const strategyEffectiveness = buildStrategyEffectiveness(clients);
   const lifecycle = buildLifecycleMetrics(clients);
   const riskDist = buildRiskDistribution(clients, camProfiles);
   const camPerf = buildCamPerformance(clients, camProfiles);
@@ -701,9 +761,47 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           </div>
         </section>
 
+        <section className="panel">
+          <div className="panel-heading"><h3>Strategy Effectiveness Leaderboard</h3><span className="badge muted">All history — total P&amp;L, win rate, 7-day trend</span></div>
+          {strategyEffectiveness.length ? (
+            <div className="table-wrap">
+              <table className="ops-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Strategy</th>
+                    <th>Total P&amp;L</th>
+                    <th>Avg/Day</th>
+                    <th>Win Rate</th>
+                    <th>Days</th>
+                    <th>Accounts</th>
+                    <th>Last 7d</th>
+                    <th>Trend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {strategyEffectiveness.map((s, i) => (
+                    <tr key={s.name}>
+                      <td className="muted">{i + 1}</td>
+                      <td><strong>{s.name}</strong><small>{s.clients} client{s.clients !== 1 ? 's' : ''}</small></td>
+                      <td className={s.totalPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(s.totalPnl)}</td>
+                      <td className={s.avgPerDay >= 0 ? 'positive' : 'negative'}>{formatCurrency(s.avgPerDay)}</td>
+                      <td className={s.winRate >= 60 ? 'positive' : s.winRate >= 40 ? '' : 'negative'}>{s.winRate}%</td>
+                      <td>{s.days}</td>
+                      <td>{s.accounts}</td>
+                      <td className={s.last7Pnl >= 0 ? 'positive' : 'negative'}>{s.last7Pnl >= 0 ? '+' : ''}{formatCurrency(s.last7Pnl)}</td>
+                      <td className={s.trend >= 0 ? 'positive' : 'negative'}>{s.trend >= 0 ? '▲' : '▼'} {formatCurrency(Math.abs(s.trend))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <p className="muted" style={{padding:'16px'}}>No strategy history available yet.</p>}
+        </section>
+
         <section className="overview-grid">
           <div className="panel">
-            <div className="panel-heading"><h3>Strategy analyzer</h3><span className="count">Score 0–10</span></div>
+            <div className="panel-heading"><h3>Latest close snapshot</h3><span className="count">Score 0–10</span></div>
             <div className="strategy-rank-list">
               {strategies.length ? strategies.map((s) => (
                 <div className="rank-row" key={s.name}>
