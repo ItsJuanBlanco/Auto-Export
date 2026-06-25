@@ -80,6 +80,73 @@ function getRiskScore(account, snapshots) {
   return { label: 'High', tone: 'negative' };
 }
 
+function formatUSD(n) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+}
+
+function IncomeProjection({ currentFunded }) {
+  const [avgPerAccount, setAvgPerAccount] = useState(800);
+  const [targetMonthly, setTargetMonthly] = useState(10000);
+
+  const accountsNeeded = avgPerAccount > 0 ? Math.ceil(targetMonthly / avgPerAccount) : '—';
+  const currentMonthly = currentFunded * avgPerAccount;
+  const gap = targetMonthly - currentMonthly;
+
+  return (
+    <div className="income-projection">
+      <div className="income-inputs">
+        <div>
+          <label>Avg monthly P&L per funded account</label>
+          <input
+            type="number"
+            value={avgPerAccount}
+            min={100}
+            step={100}
+            onChange={(e) => setAvgPerAccount(Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <label>Monthly income target</label>
+          <input
+            type="number"
+            value={targetMonthly}
+            min={1000}
+            step={1000}
+            onChange={(e) => setTargetMonthly(Number(e.target.value))}
+          />
+        </div>
+      </div>
+      <div className="income-results">
+        <div className="income-result-card">
+          <span>Accounts needed for target</span>
+          <strong>{accountsNeeded}</strong>
+        </div>
+        <div className="income-result-card">
+          <span>Current funded accounts</span>
+          <strong>{currentFunded}</strong>
+        </div>
+        <div className="income-result-card">
+          <span>Current projected monthly</span>
+          <strong className={currentMonthly >= targetMonthly ? 'positive' : ''}>{formatUSD(currentMonthly)}</strong>
+        </div>
+        <div className="income-result-card">
+          <span>{gap > 0 ? 'Gap to target' : 'Surplus above target'}</span>
+          <strong className={gap <= 0 ? 'positive' : 'warning'}>{formatUSD(Math.abs(gap))}</strong>
+        </div>
+      </div>
+      {gap > 0 && currentFunded > 0 ? (
+        <p className="income-note muted">
+          Need {accountsNeeded - currentFunded} more funded account{accountsNeeded - currentFunded !== 1 ? 's' : ''} to reach {formatUSD(targetMonthly)}/mo at {formatUSD(avgPerAccount)}/account avg.
+        </p>
+      ) : gap <= 0 && currentFunded > 0 ? (
+        <p className="income-note positive">
+          On track. {currentFunded} funded accounts generating ~{formatUSD(currentMonthly)}/mo at {formatUSD(avgPerAccount)}/account avg.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function StackPlaybook({ client, dailyImport, onUpdateAccount }) {
   const registry = {
     ...(dailyImport?.accounts || {}),
@@ -252,6 +319,14 @@ export default function StackPlaybook({ client, dailyImport, onUpdateAccount }) 
           </div>
         </section>
       ) : null}
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h3>Income Projection</h3>
+          <span className="badge muted">How many accounts to hit a monthly target?</span>
+        </div>
+        <IncomeProjection currentFunded={funded.length} />
+      </section>
 
       <section className="panel">
         <div className="panel-heading">
