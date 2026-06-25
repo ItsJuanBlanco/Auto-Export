@@ -3452,6 +3452,8 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
   const [accountName, setAccountName] = useState('');
   const [filterType, setFilterType] = useState('All');
   const [filterSearch, setFilterSearch] = useState('');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
   const log = client.activityLog || [];
   const accounts = Object.values(client.accountRegistry || {});
 
@@ -3480,8 +3482,11 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
   const filtered = log.filter((entry) => {
     if (filterType !== 'All' && entry.type !== filterType) return false;
     if (filterSearch && !entry.text?.toLowerCase().includes(filterSearch.toLowerCase()) && !entry.accountName?.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+    const entryDate = entry.createdAt?.slice(0, 10) || '';
+    if (filterFrom && entryDate < filterFrom) return false;
+    if (filterTo && entryDate > filterTo) return false;
     return true;
-  });
+  }).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 
   return (
     <section className="panel">
@@ -3516,8 +3521,10 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
             placeholder="Search log..."
             onChange={(e) => setFilterSearch(e.target.value)}
           />
-          {(filterType !== 'All' || filterSearch) ? (
-            <button className="ghost-button" onClick={() => { setFilterType('All'); setFilterSearch(''); }}>Clear</button>
+          <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} title="From date" style={{width:130,fontSize:12}} />
+          <input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} title="To date" style={{width:130,fontSize:12}} />
+          {(filterType !== 'All' || filterSearch || filterFrom || filterTo) ? (
+            <button className="ghost-button" onClick={() => { setFilterType('All'); setFilterSearch(''); setFilterFrom(''); setFilterTo(''); }}>Clear</button>
           ) : null}
           <span className="muted" style={{ fontSize: 12 }}>{filtered.length} of {log.length}</span>
         </div>
