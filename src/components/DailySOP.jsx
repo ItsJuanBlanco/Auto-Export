@@ -90,8 +90,13 @@ export default function DailySOP() {
   const totalItems = SOP_SECTIONS.reduce((sum, s) => sum + s.items.length, 0);
 
   const [checked, setChecked] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); }
-    catch { return {}; }
+    try {
+      // Prune SOP keys older than 30 days to prevent unbounded localStorage growth
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      Object.keys(localStorage).filter(k => k.startsWith('cam-sop-2') && k.slice(8) < cutoffStr).forEach(k => localStorage.removeItem(k));
+      return JSON.parse(localStorage.getItem(storageKey) || '{}');
+    } catch { return {}; }
   });
   const [justCompleted, setJustCompleted] = useState(false);
   const streak = getStreak();
