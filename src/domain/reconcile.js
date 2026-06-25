@@ -142,7 +142,7 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
 
     accountsByName[account.accountName] = meta;
     snapshots.push(createSnapshot(account, strategies));
-    seen.add(account.accountName);
+    seen.add(account.accountName.toLowerCase());
 
     if (!existing) {
       flags.push(makeFlag({
@@ -275,7 +275,7 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
   }
 
   for (const [accountName, meta] of Object.entries(registry)) {
-    if (seen.has(accountName)) continue;
+    if (seen.has(accountName.toLowerCase())) continue;
     accountsByName[accountName] = meta;
     if (meta.accountType !== ACCOUNT_TYPES.IGNORE && meta.status !== ACCOUNT_STATUSES.INACTIVE) {
       flags.push(makeFlag({
