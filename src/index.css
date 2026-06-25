@@ -1906,6 +1906,8 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .quick-log-panel select { flex-shrink: 0; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--hover); color: var(--text); font-size: 13px; }
 .quick-log-panel input { flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--hover); color: var(--text); font-size: 13px; }
 .quick-log-panel input:focus { outline: none; border-color: var(--accent); }
+.templates-panel { padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.templates-grid { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Payout History section in ClientOverview */
 .payout-history-list { display: flex; flex-direction: column; gap: 12px; }

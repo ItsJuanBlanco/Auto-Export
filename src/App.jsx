@@ -3851,6 +3851,7 @@ export default function App() {
 
   const [copyDone, setCopyDone] = useState(false);
   const [copyWeekDone, setCopyWeekDone] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   function copyClientReport() {
     if (!selectedClient || !dailyImport) return;
@@ -4144,6 +4145,7 @@ export default function App() {
                     }}><ChevronRight size={15} /></button>
                   </div>
                   <button className="ghost-button" disabled={!selectedClient} onClick={() => setShowQuickLog(v => !v)} title="Quick Log (Alt+L)"><Plus size={16} /> Quick Log</button>
+                  <button className="ghost-button" disabled={!selectedClient} onClick={() => setShowTemplates(v => !v)} title="Message templates for WhatsApp/Telegram">📋 Templates</button>
                   <button className="secondary-button" onClick={() => setShowUpload((value) => !value)} title="Upload NT CSV files (Alt+U)"><Upload size={16} /> Upload Daily Files</button>
                   <button className="ghost-button" disabled={!dailyImport} onClick={copyClientReport} title="Copy pre-formatted daily update for WhatsApp/Telegram">
                     <Copy size={16} />{copyDone ? ' Copied!' : ' Copy Update'}
@@ -4204,6 +4206,36 @@ export default function App() {
                   <button className="ghost-button" type="button" onClick={() => setShowQuickLog(false)}>Cancel</button>
                 </form>
               )}
+
+              {showTemplates && selectedClient && (() => {
+                const clientName = selectedClient.profile?.fullName || selectedClient.name;
+                const templates = [
+                  { label: 'Daily update', text: `Hola ${clientName} 👋\n\nAquí tu resumen de hoy:\n📊 P&L: [AMOUNT]\n📉 Drawdown buffer: [BUFFER]\n✅ Todo bien — seguimos mañana!` },
+                  { label: 'Drawdown warning', text: `Hola ${clientName} — quick update:\n\n⚠️ Tu cuenta está acercándose al límite de drawdown.\n💰 Buffer restante: [BUFFER]\n\nVamos a monitorear de cerca. Si tienes dudas, avísame.` },
+                  { label: 'Eval passed', text: `🎉 Buenas noticias ${clientName}!\n\nTu cuenta de evaluación **PASÓ**.\n✅ Pasando al proceso de fondeo.\n📋 Próximos pasos: [STEPS]\n\nFelicidades!` },
+                  { label: 'Payout processing', text: `Hola ${clientName} 👋\n\n💸 Tu payout ha sido solicitado y está en proceso.\n📅 Tiempo estimado: 3–5 días hábiles.\n\nAvisamos cuando se confirme.` },
+                  { label: 'Weekly check-in', text: `Hola ${clientName} — resumen semanal:\n\n📅 Semana del [DATE]\n📊 P&L semana: [WEEKLY_PNL]\n📈 Días positivos: [WIN_DAYS]/[TOTAL_DAYS]\n\nSeguimos la próxima semana. Cualquier duda, aquí estamos!` },
+                  { label: 'Account at risk', text: `${clientName} — importante:\n\n🚨 Tu cuenta está en zona de riesgo.\nDrawdown buffer: [BUFFER]\n\nPor favor revisa tu VPS y confirma que todo esté corriendo bien. Si necesitas pausar la estrategia, avísame ANTES de hacer cambios.` },
+                  { label: 'VPS issue detected', text: `Hola ${clientName} 👋\n\n🖥️ Detecté una posible desconexión en tu VPS.\nVerifiqué [ACCOUNT] — [STATUS].\n\nTe aviso si hay algo que necesite tu atención.` },
+                ];
+                return (
+                  <div className="templates-panel">
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                      <strong style={{fontSize:13}}>Message templates</strong>
+                      <button className="ghost-button" style={{fontSize:11}} onClick={() => setShowTemplates(false)}>✕ Close</button>
+                    </div>
+                    <div className="templates-grid">
+                      {templates.map(t => (
+                        <button key={t.label} className="ghost-button" style={{textAlign:'left',padding:'6px 10px',fontSize:12,justifyContent:'flex-start'}}
+                          onClick={() => { navigator.clipboard.writeText(t.text); setShowTemplates(false); handleAddActivity({ id: `act-${Date.now()}`, type: 'Message', text: `Template sent: ${t.label}`, createdAt: new Date().toISOString() }); }}>
+                          📋 {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="muted" style={{fontSize:11,marginTop:6}}>Clicking copies template to clipboard and logs it as a Message activity.</p>
+                  </div>
+                );
+              })()}
 
               {(() => {
                 const actions = buildTodayActions(selectedClient, dailyImport);
