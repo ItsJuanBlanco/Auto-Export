@@ -595,10 +595,19 @@ export function parseImportedState(text) {
 
 function isStaleDemoState(state) {
   if (!state || typeof state !== 'object') return true;
-  if (state.demoVersion !== DEMO_STATE_VERSION) return true;
+  // If state has valid clients and CAM profiles, preserve it regardless of version.
+  // Only reset if structurally broken (missing required arrays).
   if (!Array.isArray(state.clients) || !state.clients.length) return true;
   if (!Array.isArray(state.camProfiles) || !state.camProfiles.length) return true;
-  return state.camProfiles.some((profile) => !Array.isArray(profile.clientIds));
+  if (state.camProfiles.some((profile) => !Array.isArray(profile.clientIds))) return true;
+  return false;
+}
+
+export function isLikelyDemoData(state) {
+  // Heuristic: if all client names match the original demo names, assume demo data
+  const DEMO_NAMES = new Set(['Carlos M.', 'Ana P.', 'John D.', 'Maria L.', 'Robert K.', 'Sofia R.', 'James W.']);
+  const clients = state?.clients || [];
+  return clients.length > 0 && clients.every(c => DEMO_NAMES.has(c.name));
 }
 
 export function loadDemoState() {
@@ -607,7 +616,9 @@ export function loadDemoState() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return createInitialState();
     const parsed = JSON.parse(raw);
-    return isStaleDemoState(parsed) ? createInitialState() : parsed;
+    if (isStaleDemoState(parsed)) return createInitialState();
+    // Stamp current version so the check passes on next load
+    return { ...parsed, demoVersion: DEMO_STATE_VERSION };
   } catch {
     return createInitialState();
   }
