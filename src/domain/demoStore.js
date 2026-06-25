@@ -532,16 +532,19 @@ export function upsertAccountMeta(state, clientId, accountName, patch) {
 }
 
 export function appendDailyImport(state, clientId, importResult) {
-  return updateClient(state, clientId, (client) => ({
-    ...client,
-    accountRegistry: {
-      ...client.accountRegistry,
-      ...importResult.accounts,
-    },
-    dailyImports: [...client.dailyImports.filter((item) => item.id !== importResult.id), importResult].sort((a, b) => {
-      return String(a.importedAt || '').localeCompare(String(b.importedAt || ''));
-    }),
-  }));
+  return updateClient(state, clientId, (client) => {
+    const existing = client.dailyImports.find(d => d.date === importResult.date);
+    const status = existing?.status === 'Closed' ? existing.status : (importResult.status || 'Needs review');
+    const merged = { ...importResult, status };
+    return {
+      ...client,
+      accountRegistry: { ...client.accountRegistry, ...importResult.accounts },
+      dailyImports: [
+        ...client.dailyImports.filter(d => d.date !== importResult.date),
+        merged,
+      ].sort((a, b) => String(a.date).localeCompare(String(b.date))),
+    };
+  });
 }
 
 export function updateClientDetails(state, clientId, patch) {
