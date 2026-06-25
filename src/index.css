@@ -1903,3 +1903,6 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .activity-feed-type { font-size: 11px; }
 .activity-feed-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .activity-feed-date { text-align: right; font-size: 11px; }
+
+/* P&L in sidebar client rows */
+.sidebar-pnl { font-size: 10px; font-weight: 600; margin-left: auto; margin-right: 2px; flex-shrink: 0; }

@@ -3579,6 +3579,12 @@ export default function App() {
                   >
                     <span className={`close-dot close-dot-${closeStatus}`} title={closeStatus === 'no-close' ? 'No files today' : closeStatus === 'closed' ? 'Closed today' : 'Uploaded · not closed'} />
                     <span>{client.name}{(() => { const d = lastContactDaysAgo(client); return d !== null && d > 3 ? <span className="last-contact-dot" title={`Last contact ${d}d ago`} style={{ background: d > 7 ? 'var(--red)' : 'var(--yellow)' }} /> : null; })()}</span>
+                    {(() => {
+                      const latest = client.dailyImports?.at(-1);
+                      if (!latest) return null;
+                      const pnl = (latest.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0);
+                      return <small className={pnl >= 0 ? 'sidebar-pnl positive' : 'sidebar-pnl negative'}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</small>;
+                    })()}
                     <em className={badge.tone}>{badge.label}</em>
                   </button>
                 );
