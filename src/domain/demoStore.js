@@ -544,6 +544,10 @@ export function updateClientDetails(state, clientId, patch) {
   }));
 }
 
+export function togglePinClient(state, clientId) {
+  return updateClient(state, clientId, (client) => ({ ...client, pinned: !client.pinned }));
+}
+
 export function updateImportStatus(state, clientId, importId, status) {
   return updateClient(state, clientId, (client) => ({
     ...client,

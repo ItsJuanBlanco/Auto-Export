@@ -32,6 +32,7 @@ import {
   addClient,
   removeClient,
   transferClient,
+  togglePinClient,
   addCamProfile,
   addTask,
   appendDailyImport,
@@ -4412,6 +4413,8 @@ export default function App() {
             <>
               <div className="nav-label">Clients</div>
               {[...currentCamClients].sort((a, b) => {
+                if (a.pinned && !b.pinned) return -1;
+                if (b.pinned && !a.pinned) return 1;
                 const urgencyScore = (c) => {
                   const bd = deriveClientBadge(c);
                   if (bd.tone === 'danger') return 0;
@@ -4442,6 +4445,11 @@ export default function App() {
                       const pnl = (latest.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0);
                       return <small className={pnl >= 0 ? 'sidebar-pnl positive' : 'sidebar-pnl negative'}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</small>;
                     })()}
+                    <span
+                      className={`pin-btn${client.pinned ? ' pinned' : ''}`}
+                      title={client.pinned ? 'Unpin client' : 'Pin to top'}
+                      onClick={e => { e.stopPropagation(); setState(s => togglePinClient(s, client.id)); }}
+                    >★</span>
                     <em className={badge.tone}>{badge.label}</em>
                   </button>
                 );

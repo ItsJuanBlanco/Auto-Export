@@ -2086,3 +2086,9 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .global-search-text { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .global-search-sub { font-size: 11px; white-space: nowrap; }
 .global-search-footer { font-size: 11px; padding: 8px 14px; border-top: 1px solid var(--line); text-align: right; }
+
+/* Sidebar pin button */
+.pin-btn { font-size: 11px; color: var(--line); cursor: pointer; flex-shrink: 0; transition: color 0.15s; line-height: 1; }
+.pin-btn:hover { color: var(--warning); }
+.pin-btn.pinned { color: var(--warning); }
+.client-link:not(:hover) .pin-btn:not(.pinned) { opacity: 0; }
