@@ -112,7 +112,7 @@ function buildTradeStats(executions, strategies) {
 
 function AccountHistorySparkline({ accountName, dailyImports }) {
   const history = (dailyImports || []).slice(-14).map((di) => {
-    const snap = (di.snapshots || []).find((s) => s.accountName === accountName);
+    const snap = (di.snapshots || []).find((s) => s.accountName?.toLowerCase() === accountName?.toLowerCase());
     return { date: di.date, pnl: snap ? Number(snap.grossRealizedPnl || 0) : null };
   }).filter((d) => d.pnl !== null);
 
