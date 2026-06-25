@@ -4381,7 +4381,16 @@ export default function App() {
   }, []);
   const [newClientName, setNewClientName] = useState('');
   const [clientSearch, setClientSearch] = useState('');
-  const [viewedClientIds, setViewedClientIds] = useState(new Set());
+  const [viewedClientIds, setViewedClientIds] = useState(() => {
+    try { const raw = sessionStorage.getItem('cam_viewed_clients'); return raw ? new Set(JSON.parse(raw)) : new Set(); } catch { return new Set(); }
+  });
+  function markClientViewed(clientId) {
+    setViewedClientIds(s => {
+      const next = new Set([...s, clientId]);
+      try { sessionStorage.setItem('cam_viewed_clients', JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
   const [activeTab, setActiveTab] = useState('Overview');
   const [selectedDate, setSelectedDate] = useState(todayIsoDate());
   const [showUpload, setShowUpload] = useState(false);
@@ -4810,7 +4819,7 @@ export default function App() {
                   <button
                     key={client.id}
                     className={!showOverview && selectedClient?.id === client.id ? 'client-link client-link-search active' : 'client-link client-link-search'}
-                    onClick={() => { setState((current) => selectClient(current, client.id)); setShowOverview(false); setShowSOP(false); setClientSearch(''); setViewedClientIds(s => new Set([...s, client.id])); }}
+                    onClick={() => { setState((current) => selectClient(current, client.id)); setShowOverview(false); setShowSOP(false); setClientSearch(''); markClientViewed(client.id); }}
                   >
                     <span>{client.name}</span>
                     <div className="search-matches">
@@ -4846,7 +4855,7 @@ export default function App() {
                   <button
                     className={!showOverview && selectedClient?.id === client.id ? 'client-link active' : 'client-link'}
                     key={client.id}
-                    onClick={() => { setState((current) => selectClient(current, client.id)); setShowOverview(false); setShowSOP(false); setViewedClientIds(s => new Set([...s, client.id])); }}
+                    onClick={() => { setState((current) => selectClient(current, client.id)); setShowOverview(false); setShowSOP(false); markClientViewed(client.id); }}
                   >
                     <span className={`close-dot close-dot-${closeStatus}`} title={closeStatus === 'no-close' ? 'No files today' : closeStatus === 'closed' ? 'Closed today' : 'Uploaded · not closed'} />
                     {closeStatus === 'uploaded' && !viewedClientIds.has(client.id) && <span className="new-data-badge" title="New data uploaded — not yet reviewed">NEW</span>}
