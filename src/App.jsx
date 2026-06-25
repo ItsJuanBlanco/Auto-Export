@@ -2978,6 +2978,7 @@ function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
   const [editText, setEditText] = useState('');
   const [editDue, setEditDue] = useState('');
   const [editPriority, setEditPriority] = useState('Normal');
+  const [taskFilter, setTaskFilter] = useState('open');
 
   function startEdit(task) {
     setEditingId(task.id);
@@ -3003,7 +3004,15 @@ function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
     if (b.dueDate) return 1;
     return 0;
   });
-  const openCount = tasks.filter((t) => !t.done).length;
+  const today = todayIsoDate();
+  const allTasks = tasks;
+  const overdueCount = allTasks.filter((t) => !t.done && t.dueDate && t.dueDate < today).length;
+  const openCount = allTasks.filter((t) => !t.done).length;
+  const doneCount = allTasks.filter((t) => t.done).length;
+  const filteredTasks = taskFilter === 'all' ? allTasks
+    : taskFilter === 'done' ? allTasks.filter(t => t.done)
+    : taskFilter === 'overdue' ? allTasks.filter(t => !t.done && t.dueDate && t.dueDate < today)
+    : allTasks.filter(t => !t.done);
   const accounts = Object.values(client.accountRegistry || {});
 
   function submit(event) {
@@ -3041,6 +3050,13 @@ function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
       <div className="panel-heading">
         <h3>Tasks</h3>
         {openCount > 0 ? <span className="count">{openCount} open</span> : <span className="badge success">All done</span>}
+        <div className="task-filter-chips" style={{marginLeft:'auto',display:'flex',gap:4}}>
+          <button className={`ghost-button${taskFilter==='open'?' active':''}`} onClick={()=>setTaskFilter('open')}>Open{openCount>0?` (${openCount})`:''}</button>
+          {overdueCount>0 && <button className={`ghost-button${taskFilter==='overdue'?' active':''}`} onClick={()=>setTaskFilter('overdue')} style={{color:'var(--red)'}}>Overdue ({overdueCount})</button>}
+          <button className={`ghost-button${taskFilter==='done'?' active':''}`} onClick={()=>setTaskFilter('done')}>Done{doneCount>0?` (${doneCount})`:''}</button>
+          <button className={`ghost-button${taskFilter==='all'?' active':''}`} onClick={()=>setTaskFilter('all')}>All</button>
+          {openCount>1 && <button className="ghost-button" title="Mark all open tasks done" onClick={()=>{allTasks.filter(t=>!t.done).forEach(t=>onUpdateTask(t.id,{done:true}));}}>✓ All</button>}
+        </div>
       </div>
       <form className="task-form" onSubmit={submit}>
         <input
@@ -3061,9 +3077,9 @@ function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
           <button className="primary-button"><Plus size={14} /> Add task</button>
         </div>
       </form>
-      {tasks.length ? (
+      {filteredTasks.length ? (
         <div className="task-list">
-          {tasks.map((task) => {
+          {filteredTasks.map((task) => {
             const due = formatDue(task.dueDate);
             const alias = task.accountName
               ? (accounts.find((a) => a.accountName === task.accountName)?.alias || task.accountName)
@@ -3105,7 +3121,7 @@ function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
           })}
         </div>
       ) : (
-        <p className="muted">No tasks yet. Add follow-ups, reminders, or action items above.</p>
+        <p className="muted">{taskFilter==='open'&&allTasks.length?'No open tasks — all done!':taskFilter==='overdue'?'No overdue tasks.':taskFilter==='done'&&!doneCount?'No completed tasks yet.':'No tasks yet. Add follow-ups, reminders, or action items above.'}</p>
       )}
     </section>
   );
