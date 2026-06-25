@@ -3210,7 +3210,14 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
       ) : null}
       {filtered.length ? (
         <div className="activity-list">
-          {filtered.map((entry) => (
+          {filtered.map((entry) => {
+            const highlight = (str) => {
+              if (!filterSearch || !str) return str;
+              const idx = str.toLowerCase().indexOf(filterSearch.toLowerCase());
+              if (idx === -1) return str;
+              return <>{str.slice(0, idx)}<mark style={{background:'rgba(69,163,255,0.3)',borderRadius:2,padding:'0 1px'}}>{str.slice(idx, idx + filterSearch.length)}</mark>{str.slice(idx + filterSearch.length)}</>;
+            };
+            return (
             <div className="activity-entry" key={entry.id}>
               <div className="activity-meta">
                 <span className={`activity-type activity-${entry.type?.toLowerCase()}`}>{entry.type || 'Note'}</span>
@@ -3218,9 +3225,10 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
                 <em>{formatDate(entry.createdAt)}</em>
                 <button className="ghost-button icon-only" onClick={() => onDeleteEntry(entry.id)} title="Delete entry"><Trash2 size={13} /></button>
               </div>
-              <p>{entry.text}</p>
+              <p>{highlight(entry.text)}</p>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : log.length ? (
         <p className="muted">No entries match the current filter.</p>
