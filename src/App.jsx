@@ -457,10 +457,11 @@ function buildStrategyEffectiveness(clients = []) {
             stratMap.set(key, { name: key, totalPnl: 0, contributions: [], winDays: 0, lossDays: 0, accountSet: new Set(), clientSet: new Set() });
           }
           const entry = stratMap.get(key);
-          entry.totalPnl += realized || accountContrib;
-          entry.contributions.push({ date: di.date, pnl: realized || accountContrib });
-          if ((realized || accountContrib) > 0) entry.winDays += 1;
-          else if ((realized || accountContrib) < 0) entry.lossDays += 1;
+          const pnl = strategy.realized != null ? realized : accountContrib;
+          entry.totalPnl += pnl;
+          entry.contributions.push({ date: di.date, pnl });
+          if (pnl > 0) entry.winDays += 1;
+          else if (pnl < 0) entry.lossDays += 1;
           entry.accountSet.add(snapshot.accountName);
           entry.clientSet.add(client.name);
         }
