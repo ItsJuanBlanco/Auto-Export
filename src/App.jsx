@@ -4892,8 +4892,12 @@ export default function App() {
               {results.map((r, i) => (
                 <button key={i} className="global-search-result" onClick={() => {
                   setGlobalSearchOpen(false);
+                  const ownerCam = (state.camProfiles || []).find(p => (p.clientIds || []).includes(r.client.id));
+                  setState(s => {
+                    const withCam = ownerCam ? selectCam(s, ownerCam.id) : s;
+                    return selectClient(withCam, r.client.id);
+                  });
                   setPlatformView('cam');
-                  setState(s => selectClient(s, r.client.id));
                   setShowOverview(false);
                   setShowSOP(false);
                   setActiveTab(r.tab);
