@@ -1013,7 +1013,7 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
   return lines.join('\n');
 }
 
-function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient }) {
+function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onCreateCam, onLogout, users = [], onUsersChange, session, onUpdateClientAccount, onTransferClient, onResolveFlag }) {
   const [newCamName, setNewCamName] = useState('');
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', email: '', role: USER_ROLES.CAM, camProfileId: '' });
   const [editUserId, setEditUserId] = useState(null);
@@ -1226,7 +1226,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                 .filter(f => f.status !== 'Resolved')
                 .map(f => {
                   const cam = camProfiles.find(p => (p.clientIds || []).includes(c.id));
-                  return { ...f, clientName: c.name, clientId: c.id, camId: cam?.id, camName: cam?.name, date: di.date };
+                  return { ...f, clientName: c.name, clientId: c.id, importId: di.id, camId: cam?.id, camName: cam?.name, date: di.date };
                 })
             )
           ).sort((a, b) => {
@@ -1244,7 +1244,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
               </div>
               <div className="ops-table-wrap">
                 <table className="ops-table">
-                  <thead><tr><th>Client</th><th>CAM</th><th>Date</th><th>Severity</th><th>Flag</th></tr></thead>
+                  <thead><tr><th>Client</th><th>CAM</th><th>Date</th><th>Severity</th><th>Flag</th><th></th></tr></thead>
                   <tbody>
                     {allFlags.map((f, i) => (
                       <tr key={i} style={f.severity === 'Critical' ? {background:'var(--red-dim, rgba(239,68,68,.06))'} : undefined}>
@@ -1253,6 +1253,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                         <td className="muted">{f.date}</td>
                         <td><span className={`badge ${f.severity === 'Critical' ? 'danger' : 'warning'}`}>{f.severity}</span></td>
                         <td>{f.message || f.type || '—'}</td>
+                        <td>{onResolveFlag && <button className="ghost-button" style={{fontSize:11,padding:'2px 8px',whiteSpace:'nowrap'}} onClick={() => onResolveFlag(f.clientId, f.importId, f.id)}>✓ Resolve</button>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -4169,6 +4170,9 @@ export default function App() {
         }
         onTransferClient={(clientId, toCamId) =>
           setState((current) => transferClient(current, clientId, toCamId))
+        }
+        onResolveFlag={(clientId, importId, flagId) =>
+          setState((current) => resolveFlagInImport(current, clientId, importId, flagId))
         }
       />
     );
