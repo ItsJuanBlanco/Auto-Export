@@ -4345,7 +4345,13 @@ function PriceChecksTab({ client, onUpdateClient }) {
 export default function App() {
   const [state, setState] = useState(() => loadDemoState());
   const [users, setUsers] = useState(() => loadUsers());
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(() => {
+    try { const raw = sessionStorage.getItem('cam_crm_session'); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  });
+  function persistSession(user) {
+    setSession(user);
+    try { if (user) sessionStorage.setItem('cam_crm_session', JSON.stringify(user)); else sessionStorage.removeItem('cam_crm_session'); } catch {}
+  }
   const [platformView, setPlatformView] = useState('manager');
   const [newClientName, setNewClientName] = useState('');
   const [clientSearch, setClientSearch] = useState('');
@@ -4645,7 +4651,7 @@ export default function App() {
       <LoginScreen
         users={users}
         onLogin={(user) => {
-          setSession(user);
+          persistSession(user);
           if (user.role === USER_ROLES.CAM && user.camProfileId) {
             openCamWorkspace(user.camProfileId);
           } else {
@@ -4675,7 +4681,7 @@ export default function App() {
             if (!already) setUsers(u => addUser(u, { username, password, displayName: name, email: '', role: USER_ROLES.CAM, camProfileId: profileId }));
           }
         }}
-        onLogout={() => setSession(null)}
+        onLogout={() => persistSession(null)}
         users={users}
         onUsersChange={setUsers}
         session={session}
@@ -4711,7 +4717,7 @@ export default function App() {
         <div className="sidebar-header">
           <div className="sidebar-role-row">
             <span className="sidebar-role-badge cam-badge">CAM</span>
-            <button className="sidebar-logout-btn" onClick={() => setSession(null)} title="Sign out"><LogOut size={14} /></button>
+            <button className="sidebar-logout-btn" onClick={() => persistSession(null)} title="Sign out"><LogOut size={14} /></button>
           </div>
           <strong>{currentCamProfile?.name || state.accountManager.name}</strong>
           <small className="sidebar-role-sub">{session?.displayName || session?.username || ''} · {session?.role || 'CAM'}</small>
