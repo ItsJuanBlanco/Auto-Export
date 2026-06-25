@@ -2074,6 +2074,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
 }
 
 function MonthlyReportPanel({ client, month, onClose }) {
+  const [copied, setCopied] = useState(false);
   // month = 'YYYY-MM'
   const registry = client?.accountRegistry || {};
   const monthImports = (client?.dailyImports || []).filter((di) => di.date?.startsWith(month));
@@ -2112,6 +2113,11 @@ function MonthlyReportPanel({ client, month, onClose }) {
       <div className="report-sheet">
         <div className="report-actions no-print">
           <button className="secondary-button" onClick={() => window.print()}>Print / Save PDF</button>
+          <button className="ghost-button" onClick={() => {
+            const msg = buildWeeklyMessageReport(client);
+            if (!msg) return;
+            navigator.clipboard.writeText(msg).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); });
+          }}>{copied ? '✓ Copied!' : '📋 Copy WhatsApp'}</button>
           <button className="ghost-button" onClick={onClose}>Close</button>
         </div>
         <header className="report-header">
