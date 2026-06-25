@@ -2699,6 +2699,54 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
 
       <InsightFeedPanel insights={insights} onSelectClient={onSelectClient} />
 
+      {(() => {
+        const allOpenTasks = clients.flatMap(c =>
+          (c.tasks || [])
+            .filter(t => !t.done)
+            .map(t => ({ ...t, clientName: c.name, clientId: c.id }))
+        ).sort((a, b) => {
+          const scoreA = a.dueDate && a.dueDate < today ? 0 : a.priority === 'High' ? 1 : a.dueDate === today ? 2 : 3;
+          const scoreB = b.dueDate && b.dueDate < today ? 0 : b.priority === 'High' ? 1 : b.dueDate === today ? 2 : 3;
+          if (scoreA !== scoreB) return scoreA - scoreB;
+          return (a.dueDate || '9').localeCompare(b.dueDate || '9');
+        });
+        if (!allOpenTasks.length) return null;
+        const overdue = allOpenTasks.filter(t => t.dueDate && t.dueDate < today).length;
+        const dueToday = allOpenTasks.filter(t => t.dueDate === today).length;
+        return (
+          <section className="panel">
+            <div className="panel-heading">
+              <h3>My open tasks</h3>
+              <span className="count">{allOpenTasks.length} open</span>
+              {overdue > 0 && <span className="badge danger">{overdue} overdue</span>}
+              {dueToday > 0 && <span className="badge warning">{dueToday} due today</span>}
+            </div>
+            <div className="task-list">
+              {allOpenTasks.slice(0, 20).map(task => {
+                const isOverdue = task.dueDate && task.dueDate < today;
+                const isDueToday = task.dueDate === today;
+                return (
+                  <div key={task.id} className={`task-row${task.priority === 'High' ? ' task-high' : ''}`}>
+                    <div className="task-body" style={{cursor:'default'}}>
+                      <span className="task-text">{task.text}</span>
+                      <div className="task-chips">
+                        <span className="task-chip" style={{background:'var(--surface-2)'}}>{task.clientName}</span>
+                        {task.priority === 'High' && <span className="task-chip task-chip-high">High</span>}
+                        {isOverdue && <span className="task-chip task-chip-due negative">{Math.abs(Math.round((new Date(task.dueDate+'T12:00:00') - new Date()) / 86400000))}d overdue</span>}
+                        {!isOverdue && isDueToday && <span className="task-chip task-chip-due negative">Due today</span>}
+                        {!isOverdue && !isDueToday && task.dueDate && <span className="task-chip task-chip-due muted">Due {task.dueDate}</span>}
+                      </div>
+                    </div>
+                    <button className="ghost-button" style={{fontSize:11,padding:'2px 8px'}} onClick={() => onSelectClient?.(task.clientId)}>Go →</button>
+                  </div>
+                );
+              })}
+              {allOpenTasks.length > 20 && <p className="muted" style={{padding:'8px 0',fontSize:12}}>+{allOpenTasks.length - 20} more — navigate to individual clients to see all.</p>}
+            </div>
+          </section>
+        );
+      })()}
+
       {incomeProjection.length > 0 && (
         <section className="panel">
           <div className="panel-heading">
