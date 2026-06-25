@@ -519,11 +519,16 @@ export function removeAccountFromRegistry(state, clientId, accountName) {
 
 export function upsertAccountMeta(state, clientId, accountName, patch) {
   return updateClient(state, clientId, (client) => {
-    const existing = client.accountRegistry[accountName] || { accountName };
+    // Case-insensitive key lookup to prevent duplicate registry entries
+    const registry = client.accountRegistry || {};
+    const existingKey = Object.keys(registry).find(k => k.toLowerCase() === accountName.toLowerCase()) || accountName;
+    const existing = registry[existingKey] || { accountName };
+    const newRegistry = { ...registry };
+    if (existingKey !== accountName) delete newRegistry[existingKey];
     return {
       ...client,
       accountRegistry: {
-        ...client.accountRegistry,
+        ...newRegistry,
         [accountName]: {
           ...existing,
           ...patch,
