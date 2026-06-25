@@ -5212,8 +5212,8 @@ export default function App() {
         Object.values(client.accountRegistry || {}).filter(a => a.accountName?.toLowerCase().includes(q) || a.alias?.toLowerCase().includes(q)).forEach(a => {
           hits.push({ client, kind: 'Account', text: a.alias || a.accountName, sub: `${a.accountType || 'Account'} · ${a.accountName}`, tab: 'Overview' });
         });
-        if (client.name?.toLowerCase().includes(q) && !hits.length) {
-          hits.push({ client, kind: 'Client', text: client.name, sub: 'Client name match', tab: 'Overview' });
+        if (client.name?.toLowerCase().includes(q)) {
+          hits.unshift({ client, kind: 'Client', text: client.name, sub: 'Client name match', tab: 'Overview' });
         }
         return hits;
       }).slice(0, 30);
