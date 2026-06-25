@@ -3064,7 +3064,7 @@ function buildPortfolioInsights(clients, allClients = []) {
         clientId: client.id,
         clientName: client.name,
         accountAlias: w.alias,
-        message: `Best day (${formatCurrency(w.bestDayPnl)} on ${w.bestDayDate}) is ${Math.round(w.ratio * 100)}% of total gains — consistency rule at risk`,
+        message: `Best day (${formatCurrency(w.bestDayPnl)} on ${w.bestDayDate}) is ${w.ratio}% of total gains — consistency rule at risk`,
         action: 'Consider reducing position on strong days',
       });
     }
