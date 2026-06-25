@@ -4491,7 +4491,9 @@ export default function App() {
   }
 
   function handleExport() {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    let sopStreak = null;
+    try { sopStreak = JSON.parse(localStorage.getItem('cam-sop-streak') || 'null'); } catch {}
+    const blob = new Blob([JSON.stringify({ ...state, _sopStreak: sopStreak }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -4508,6 +4510,7 @@ export default function App() {
     try {
       const text = await file.text();
       const imported = parseImportedState(text);
+      if (imported._sopStreak) { try { localStorage.setItem('cam-sop-streak', JSON.stringify(imported._sopStreak)); } catch {} }
       setState(imported);
       setShowOverview(false); setShowSOP(false);
     } catch (err) {
