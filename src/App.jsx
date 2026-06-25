@@ -3026,6 +3026,25 @@ function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
   );
 }
 
+function CopyButton({ value }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+  return (
+    <button
+      className="ghost-button icon-only copy-btn"
+      title="Copy to clipboard"
+      onClick={() => {
+        navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    >
+      {copied ? '✓' : <Copy size={12} />}
+    </button>
+  );
+}
+
 function CredentialsTab({ client, onUpdateClient }) {
   const credentials = client.credentials || {};
   const profile = client.profile || {};
@@ -3070,12 +3089,12 @@ function CredentialsTab({ client, onUpdateClient }) {
           </button>
         </div>
         <div className="form-grid">
-          <label>VPS IP<input value={credentials.ip || ''} onChange={(e) => updateCredentials({ ip: e.target.value })} /></label>
-          <label>Username<input value={credentials.username || ''} onChange={(e) => updateCredentials({ username: e.target.value })} /></label>
-          <label>Password<input type={showPasswords ? 'text' : 'password'} value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /></label>
-          <label>NT login<input value={credentials.ntLogin || ''} placeholder="NinjaTrader username" onChange={(e) => updateCredentials({ ntLogin: e.target.value })} /></label>
-          <label>Prop firm login<input value={credentials.firmLogin || ''} placeholder="Dashboard login email" onChange={(e) => updateCredentials({ firmLogin: e.target.value })} /></label>
-          <label>Prop firm password<input type={showPasswords ? 'text' : 'password'} value={credentials.firmPassword || ''} onChange={(e) => updateCredentials({ firmPassword: e.target.value })} /></label>
+          <label>VPS IP<div className="input-copy-row"><input value={credentials.ip || ''} onChange={(e) => updateCredentials({ ip: e.target.value })} /><CopyButton value={credentials.ip} /></div></label>
+          <label>Username<div className="input-copy-row"><input value={credentials.username || ''} onChange={(e) => updateCredentials({ username: e.target.value })} /><CopyButton value={credentials.username} /></div></label>
+          <label>Password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /><CopyButton value={credentials.password} /></div></label>
+          <label>NT login<div className="input-copy-row"><input value={credentials.ntLogin || ''} placeholder="NinjaTrader username" onChange={(e) => updateCredentials({ ntLogin: e.target.value })} /><CopyButton value={credentials.ntLogin} /></div></label>
+          <label>Prop firm login<div className="input-copy-row"><input value={credentials.firmLogin || ''} placeholder="Dashboard login email" onChange={(e) => updateCredentials({ firmLogin: e.target.value })} /><CopyButton value={credentials.firmLogin} /></div></label>
+          <label>Prop firm password<div className="input-copy-row"><input type={showPasswords ? 'text' : 'password'} value={credentials.firmPassword || ''} onChange={(e) => updateCredentials({ firmPassword: e.target.value })} /><CopyButton value={credentials.firmPassword} /></div></label>
         </div>
       </section>
 
