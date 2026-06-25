@@ -1489,6 +1489,66 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           );
         })()}
 
+        {(() => {
+          const currentMonth = todayIsoDate().slice(0, 7);
+          const allPayouts = clients.flatMap(client => {
+            const cam = camProfiles.find(c => c.clientIds?.includes(client.id));
+            return Object.values(client.accountRegistry || {}).flatMap(acct =>
+              (acct.payoutHistory || []).map(p => ({
+                ...p,
+                clientName: client.name,
+                accountAlias: acct.alias || acct.accountName,
+                camName: cam?.name || 'Unassigned',
+              }))
+            );
+          }).filter(p => p.date && p.date.startsWith(currentMonth))
+            .sort((a, b) => b.date.localeCompare(a.date));
+
+          const allTimePayouts = clients.flatMap(client =>
+            Object.values(client.accountRegistry || {}).flatMap(acct => acct.payoutHistory || [])
+          );
+          const monthTotal = allPayouts.reduce((s, p) => s + Number(p.amount || 0), 0);
+          const allTimeTotal = allTimePayouts.reduce((s, p) => s + Number(p.amount || 0), 0);
+          const allTimeCount = allTimePayouts.length;
+          if (!allTimePayouts.length) return null;
+
+          return (
+            <section className="panel">
+              <div className="panel-heading">
+                <h3>Payout history</h3>
+                <span className="badge muted">{currentMonth}</span>
+                <span className="count">{allPayouts.length} this month</span>
+                <span className="metric" style={{marginLeft:'auto',gap:16,display:'flex'}}>
+                  <span><span className="muted" style={{fontSize:11}}>This month </span><strong className="positive">{formatCurrency(monthTotal)}</strong></span>
+                  <span><span className="muted" style={{fontSize:11}}>All time </span><strong className="positive">{formatCurrency(allTimeTotal)}</strong></span>
+                  <span><span className="muted" style={{fontSize:11}}>Total payouts </span><strong>{allTimeCount}</strong></span>
+                </span>
+              </div>
+              {allPayouts.length ? (
+                <div className="table-wrap">
+                  <table className="ops-table">
+                    <thead><tr><th>Date</th><th>Client</th><th>Account</th><th>CAM</th><th>Amount</th><th>Notes</th></tr></thead>
+                    <tbody>
+                      {allPayouts.map((p, i) => (
+                        <tr key={i}>
+                          <td><small>{p.date}</small></td>
+                          <td>{p.clientName}</td>
+                          <td><small>{p.accountAlias}</small></td>
+                          <td><small>{p.camName}</small></td>
+                          <td className="positive"><strong>{formatCurrency(Number(p.amount || 0))}</strong></td>
+                          <td><small className="muted">{p.notes || '—'}</small></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted" style={{padding:'8px 0'}}>No payouts recorded for {currentMonth}. Past payouts appear when months change.</p>
+              )}
+            </section>
+          );
+        })()}
+
         {showUserPanel ? (
           <section className="panel">
             <div className="panel-heading"><h3>Users &amp; Access</h3><Shield size={16} /></div>
