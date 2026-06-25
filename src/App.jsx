@@ -3414,6 +3414,7 @@ export default function App() {
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [quickLogType, setQuickLogType] = useState('Note');
   const [quickLogText, setQuickLogText] = useState('');
+  const [quickLogAccount, setQuickLogAccount] = useState('');
   const [reportImport, setReportImport] = useState(null);
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(null);
   const [registryOpen, setRegistryOpen] = useState(false);
@@ -3926,14 +3927,21 @@ export default function App() {
                     id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                     type: quickLogType,
                     text: quickLogText.trim(),
-                    accountName: '',
+                    accountName: quickLogAccount,
                     createdAt: new Date().toISOString(),
                   });
                   setQuickLogText('');
+                  setQuickLogAccount('');
                   setShowQuickLog(false);
                 }}>
                   <select value={quickLogType} onChange={e => setQuickLogType(e.target.value)}>
-                    {['Note','Call','Email','Payout','Alert','Other'].map(t => <option key={t}>{t}</option>)}
+                    {ACTIVITY_TYPES.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                  <select value={quickLogAccount} onChange={e => setQuickLogAccount(e.target.value)}>
+                    <option value="">All accounts</option>
+                    {Object.values(selectedClient.accountRegistry || {}).map(a => (
+                      <option key={a.accountName} value={a.accountName}>{a.alias || a.accountName}</option>
+                    ))}
                   </select>
                   <input
                     autoFocus
