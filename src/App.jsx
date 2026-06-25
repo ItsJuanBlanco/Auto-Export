@@ -5292,7 +5292,8 @@ export default function App() {
             <div className="global-search-bar">
               <span className="global-search-icon">⌕</span>
               <input autoFocus value={globalSearchQuery} onChange={e => { setGlobalSearchQuery(e.target.value); setGlobalSearchIdx(0); }} placeholder="Search all clients — activity, tasks, notes…" className="global-search-input" onKeyDown={e => {
-                if (e.key === 'ArrowDown') { e.preventDefault(); setGlobalSearchIdx(i => Math.min(i + 1, results.length - 1)); }
+                if (e.key === 'Escape') { setGlobalSearchOpen(false); }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); setGlobalSearchIdx(i => Math.min(i + 1, results.length - 1)); }
                 else if (e.key === 'ArrowUp') { e.preventDefault(); setGlobalSearchIdx(i => Math.max(i - 1, 0)); }
                 else if (e.key === 'Enter' && results[globalSearchIdx]) {
                   e.preventDefault();
