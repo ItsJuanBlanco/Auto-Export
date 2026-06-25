@@ -1,3 +1,11 @@
+function ciLookup(registry, accountName) {
+  if (!registry || !accountName) return {};
+  if (registry[accountName]) return registry[accountName];
+  const lower = accountName.toLowerCase();
+  const key = Object.keys(registry).find(k => k.toLowerCase() === lower);
+  return key ? registry[key] : {};
+}
+
 export function buildWeeklyMessageReport(client) {
   if (!client) return '';
   const imports = (client.dailyImports || []);
@@ -22,7 +30,7 @@ export function buildWeeklyMessageReport(client) {
   const positiveDays = dailyTotals.filter((d) => d.pnl > 0).length;
 
   const latestImport = recent.at(-1);
-  const fundedSnaps = (latestImport?.snapshots || []).filter((s) => registry[s.accountName]?.accountType === 'Funded');
+  const fundedSnaps = (latestImport?.snapshots || []).filter((s) => ciLookup(registry, s.accountName)?.accountType === 'Funded');
 
   const weekStart = recent[0]?.date;
   const weekEnd = recent.at(-1)?.date;
@@ -42,7 +50,7 @@ export function buildWeeklyMessageReport(client) {
   if (fundedSnaps.length) {
     lines.push(`✅ *Funded Accounts (${fundedSnaps.length}):*`);
     for (const s of fundedSnaps) {
-      const meta = registry[s.accountName] || {};
+      const meta = ciLookup(registry, s.accountName) || {};
       const alias = meta.alias || s.accountName;
       const strats = (s.strategies || []).filter((st) => st.enabled).map((st) => st.strategyFamily || st.strategyName).join(', ');
       const dd = Number(s.trailingMaxDrawdown || 0);
@@ -89,8 +97,8 @@ export function buildClientMessageReport(client, dailyImport) {
     ...(client?.accountRegistry || {}),
   };
 
-  const funded = snapshots.filter((s) => registry[s.accountName]?.accountType === 'Funded');
-  const evals = snapshots.filter((s) => registry[s.accountName]?.accountType?.startsWith('Evaluation'));
+  const funded = snapshots.filter((s) => ciLookup(registry, s.accountName)?.accountType === 'Funded');
+  const evals = snapshots.filter((s) => ciLookup(registry, s.accountName)?.accountType?.startsWith('Evaluation'));
 
   const totalDaily = snapshots.reduce((sum, s) => sum + Number(s.grossRealizedPnl || 0), 0);
   const totalWeekly = snapshots.reduce((sum, s) => sum + Number(s.weeklyPnl || 0), 0);
@@ -110,7 +118,7 @@ export function buildClientMessageReport(client, dailyImport) {
   if (funded.length) {
     lines.push(`✅ *Funded Accounts (${funded.length}):*`);
     for (const s of funded) {
-      const meta = registry[s.accountName] || {};
+      const meta = ciLookup(registry, s.accountName) || {};
       const alias = meta.alias || s.accountName;
       const dd = Number(s.trailingMaxDrawdown || 0);
       const pnl = Number(s.grossRealizedPnl || 0);
@@ -123,7 +131,7 @@ export function buildClientMessageReport(client, dailyImport) {
   if (evals.length) {
     lines.push(`🔄 *Evaluations (${evals.length}):*`);
     for (const s of evals) {
-      const meta = registry[s.accountName] || {};
+      const meta = ciLookup(registry, s.accountName) || {};
       const alias = meta.alias || s.accountName;
       const pnl = Number(s.grossRealizedPnl || 0);
       lines.push(`  • ${alias}: ${sign(pnl)}${fmt(pnl)} daily`);
@@ -150,7 +158,7 @@ export function buildDailyReportSummary(client, dailyImport) {
   };
 
   for (const snapshot of snapshots) {
-    const meta = registry[snapshot.accountName] || {};
+    const meta = ciLookup(registry, snapshot.accountName) || {};
     const row = { ...snapshot, meta };
     if (meta.accountType === 'Cash') grouped.cash.push(row);
     else if (meta.accountType === 'Funded') grouped.funded.push(row);
