@@ -211,7 +211,7 @@ export function buildTeamWeeklyReport(clients, camProfiles) {
       const weekImports = (c.dailyImports || []).filter(d => d.date >= weekStartStr);
       weekImports.forEach(d => { weekPnl += (d.snapshots || []).reduce((s, sn) => s + Number(sn.grossRealizedPnl || 0), 0); });
       funded += Object.values(c.accountRegistry || {}).filter(a => a.accountType === 'Funded' && a.status !== 'Failed').length;
-      payouts += (c.payoutLog || []).filter(p => p.date >= weekStartStr).length;
+      payouts += Object.values(c.accountRegistry || {}).reduce((n, meta) => n + (meta.payoutHistory || []).filter(p => p.date >= weekStartStr).length, 0);
     });
     return { cam, clients: camClients.length, weekPnl, funded, payouts };
   }).filter(r => r.clients > 0);
