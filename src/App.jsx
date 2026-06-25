@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   CheckSquare,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Download,
   FileText,
@@ -3240,7 +3242,17 @@ export default function App() {
                   <p>{dailyImport ? `${dailyImport.status} · ${dailyImport.flags.length} flags` : 'No close loaded for this date'}</p>
                 </div>
                 <div className="header-actions">
-                  <label className="date-control"><CalendarDays size={16} /><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} /></label>
+                  <div className="date-nav">
+                    <button className="ghost-button icon-only" title="Previous day" onClick={() => {
+                      const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() - 1);
+                      setSelectedDate(d.toISOString().slice(0, 10));
+                    }}><ChevronLeft size={15} /></button>
+                    <label className="date-control"><CalendarDays size={16} /><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} /></label>
+                    <button className="ghost-button icon-only" title="Next day" onClick={() => {
+                      const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() + 1);
+                      setSelectedDate(d.toISOString().slice(0, 10));
+                    }}><ChevronRight size={15} /></button>
+                  </div>
                   <button className="secondary-button" onClick={() => setShowUpload((value) => !value)}><Upload size={16} /> Upload Daily Files</button>
                   <button className="ghost-button" disabled={!dailyImport} onClick={copyClientReport} title="Copy pre-formatted daily update for WhatsApp/Telegram">
                     <Copy size={16} />{copyDone ? ' Copied!' : ' Copy Update'}
