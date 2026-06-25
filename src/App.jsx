@@ -4632,11 +4632,12 @@ export default function App() {
     const flag = (dailyImport.flags || []).find((f) => f.id === flagId);
     setState((current) => {
       let next = resolveFlagInImport(current, selectedClient.id, dailyImport.id, flagId, status);
-      if (flag && status === 'Resolved') {
+      if (flag && (status === 'Resolved' || status === 'Acknowledged')) {
+        const verb = status === 'Resolved' ? 'resolved' : 'acknowledged';
         const entry = {
           id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           type: 'Alert',
-          text: `Flag resolved: [${flag.type}] ${flag.message}`,
+          text: `Flag ${verb}: [${flag.type}] ${flag.message}`,
           accountName: flag.accountName || '',
           createdAt: new Date().toISOString(),
         };
