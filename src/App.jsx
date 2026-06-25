@@ -3064,8 +3064,13 @@ function buildPortfolioInsights(clients, allClients = []) {
     // 5. Account not uploading (no close today or yesterday)
     const todayImport = getClientImportByDate(client, today);
     if (!todayImport) {
-      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-      const yest = yesterday.toISOString().slice(0, 10);
+      // Skip check on weekends (no trading)
+      const todayDow = new Date().getDay();
+      if (todayDow !== 0 && todayDow !== 6) {
+      const prevTradingDay = new Date();
+      // Step back to find last trading day (skip Saturday=6, Sunday=0)
+      do { prevTradingDay.setDate(prevTradingDay.getDate() - 1); } while ([0, 6].includes(prevTradingDay.getDay()));
+      const yest = prevTradingDay.toISOString().slice(0, 10);
       const yesterdayImport = getClientImportByDate(client, yest);
       if (!yesterdayImport && imports.length > 0) {
         insights.push({
@@ -3074,10 +3079,11 @@ function buildPortfolioInsights(clients, allClients = []) {
           clientId: client.id,
           clientName: client.name,
           accountAlias: null,
-          message: `No daily close uploaded in the last 2 days`,
+          message: `No daily close uploaded in the last 2 trading days`,
           action: 'Check VPS connection and upload NT CSV',
         });
       }
+      } // end weekday check
     }
   }
 
