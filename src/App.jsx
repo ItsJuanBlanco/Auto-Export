@@ -1149,7 +1149,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     const unclosed = withUpload.filter(c => getClientImportByDate(c, today)?.status !== 'Closed').length;
     if (withUpload.length) score -= Math.round((unclosed / withUpload.length) * 25);
     // Deduct for critical flags
-    const critFlags = clients.reduce((n, c) => n + ((c.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved').length), 0);
+    const critFlags = clients.reduce((n, c) => n + ((c.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved' && f.status !== 'Acknowledged').length), 0);
     score -= Math.min(critFlags * 5, 25);
     // Deduct for overdue tasks
     const overdueTasks = clients.reduce((n, c) => n + (c.tasks || []).filter(t => !t.done && t.dueDate && t.dueDate < today).length, 0);
