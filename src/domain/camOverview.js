@@ -27,10 +27,10 @@ function strategyLabel(strategy) {
 }
 
 function accountMeta(client, importResult, accountName) {
-  return {
-    ...(importResult?.accounts?.[accountName] || {}),
-    ...(client?.accountRegistry?.[accountName] || {}),
-  };
+  const lower = (accountName || '').toLowerCase();
+  const fromImport = Object.entries(importResult?.accounts || {}).find(([k]) => k.toLowerCase() === lower)?.[1] || {};
+  const fromRegistry = Object.entries(client?.accountRegistry || {}).find(([k]) => k.toLowerCase() === lower)?.[1] || {};
+  return { ...fromImport, ...fromRegistry };
 }
 
 function executionMove(points = []) {
