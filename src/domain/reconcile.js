@@ -120,6 +120,8 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
   const accountsByName = {};
   const snapshots = [];
   const flags = [];
+  // Build case-insensitive registry lookup so CSV names always find their metadata
+  const registryByLower = Object.fromEntries(Object.entries(registry || {}).map(([k, v]) => [k.toLowerCase(), v]));
   const sourceAccounts = (parsed.accounts || []).filter((account) => !isSimulatorAccount(account.accountName));
   const strategies = (parsed.strategies || []).filter((strategy) => !isSimulatorAccount(strategy.accountName));
   const orders = (parsed.orders || []).filter((order) => !isSimulatorAccount(order.accountName));
@@ -134,7 +136,7 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
   const seen = new Set();
 
   for (const account of sourceAccounts) {
-    const existing = registry[account.accountName];
+    const existing = registry[account.accountName] || registryByLower[account.accountName.toLowerCase()];
     const meta = createDefaultAccount(account, existing);
     const strategies = strategiesByAccount[account.accountName] || [];
 
