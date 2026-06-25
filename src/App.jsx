@@ -3086,7 +3086,21 @@ export default function App() {
 
   function handleResolveFlag(flagId) {
     if (!selectedClient || !dailyImport) return;
-    setState((current) => resolveFlagInImport(current, selectedClient.id, dailyImport.id, flagId));
+    const flag = (dailyImport.flags || []).find((f) => f.id === flagId);
+    setState((current) => {
+      let next = resolveFlagInImport(current, selectedClient.id, dailyImport.id, flagId);
+      if (flag) {
+        const entry = {
+          id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'Alert',
+          text: `Flag resolved: [${flag.type}] ${flag.message}`,
+          accountName: flag.accountName || '',
+          createdAt: new Date().toISOString(),
+        };
+        next = addActivityEntry(next, selectedClient.id, entry);
+      }
+      return next;
+    });
   }
 
   function handleAddActivity(entry) {
@@ -3264,7 +3278,20 @@ export default function App() {
           })() : (
             <>
               <div className="nav-label">Clients</div>
-              {currentCamClients.map((client) => {
+              {[...currentCamClients].sort((a, b) => {
+                const urgencyScore = (c) => {
+                  const bd = deriveClientBadge(c);
+                  if (bd.tone === 'danger') return 0;
+                  if (bd.tone === 'warning') return 1;
+                  if (bd.tone === 'muted' && bd.label !== 'No data') return 2;
+                  return 3;
+                };
+                const diff = urgencyScore(a) - urgencyScore(b);
+                if (diff !== 0) return diff;
+                const critA = (a.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved').length;
+                const critB = (b.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved').length;
+                return critB - critA;
+              }).map((client) => {
                 const badge = deriveClientBadge(client);
                 const todayClose = getClientImportByDate(client, todayIsoDate());
                 const closeStatus = !todayClose ? 'no-close' : todayClose.status === 'Closed' ? 'closed' : 'uploaded';
