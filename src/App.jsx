@@ -4376,6 +4376,7 @@ export default function App() {
   const [showOverview, setShowOverview] = useState(false);
   const [showSOP, setShowSOP] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [quickLogType, setQuickLogType] = useState('Note');
   const [quickLogText, setQuickLogText] = useState('');
   const [quickLogAccount, setQuickLogAccount] = useState('');
@@ -4406,6 +4407,7 @@ export default function App() {
       if (e.altKey && e.key === 'l') { e.preventDefault(); setShowQuickLog(v => !v); }
       if (e.altKey && e.key === 'u') { e.preventDefault(); setShowUpload(v => !v); }
       if (e.altKey && e.key === 'o') { e.preventDefault(); setShowOverview(true); setShowSOP(false); }
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') { e.preventDefault(); setShowShortcuts(v => !v); }
       if (e.altKey && e.key === 's') { e.preventDefault(); setShowSOP(true); setShowOverview(false); }
       if (e.altKey && e.key === 'n') {
         e.preventDefault();
@@ -5155,6 +5157,21 @@ export default function App() {
     </div>
     {reportImport ? <ReportPanel client={selectedClient} dailyImport={reportImport} onClose={() => setReportImport(null)} /> : null}
     {monthlyReportMonth ? <MonthlyReportPanel client={selectedClient} month={monthlyReportMonth} onClose={() => setMonthlyReportMonth(null)} /> : null}
+    {showShortcuts && (
+      <div className="global-search-overlay" onClick={() => setShowShortcuts(false)}>
+        <div className="global-search-modal" style={{maxWidth:480}} onClick={e => e.stopPropagation()}>
+          <div style={{padding:'16px 20px',borderBottom:'1px solid var(--line)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <strong>Keyboard shortcuts</strong>
+            <button className="ghost-button" onClick={() => setShowShortcuts(false)}>✕</button>
+          </div>
+          <div style={{padding:'16px 20px',display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 20px',fontSize:13}}>
+            {[['⌘K','Global search (all clients, activities, tasks)'],['Alt+L','Toggle Quick Log panel'],['Alt+U','Toggle CSV upload panel'],['Alt+O','Go to CAM Overview'],['↑ ↓ Enter','Navigate search results'],['Esc','Close any modal'],['?','Show this panel']].map(([k,v]) => (
+              <><kbd style={{background:'var(--surface-3)',border:'1px solid var(--line)',borderRadius:4,padding:'2px 7px',fontSize:11,fontFamily:'monospace',whiteSpace:'nowrap'}}>{k}</kbd><span className="muted">{v}</span></>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
     {globalSearchOpen && (() => {
       const q = globalSearchQuery.toLowerCase().trim();
       const clients = state.clients || [];
