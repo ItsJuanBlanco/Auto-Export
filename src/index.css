@@ -1847,3 +1847,9 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 /* Date navigation with prev/next arrows */
 .date-nav { display: flex; align-items: center; gap: 2px; }
 .date-nav .icon-only { padding: 4px 6px; min-width: unset; }
+
+/* Quick Log inline panel */
+.quick-log-panel { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; margin-bottom: 8px; }
+.quick-log-panel select { flex-shrink: 0; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--hover); color: var(--text); font-size: 13px; }
+.quick-log-panel input { flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--hover); color: var(--text); font-size: 13px; }
+.quick-log-panel input:focus { outline: none; border-color: var(--accent); }

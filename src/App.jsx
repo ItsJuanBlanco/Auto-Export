@@ -2984,6 +2984,9 @@ export default function App() {
   const [showUpload, setShowUpload] = useState(false);
   const [showOverview, setShowOverview] = useState(false);
   const [showSOP, setShowSOP] = useState(false);
+  const [showQuickLog, setShowQuickLog] = useState(false);
+  const [quickLogType, setQuickLogType] = useState('Note');
+  const [quickLogText, setQuickLogText] = useState('');
   const [reportImport, setReportImport] = useState(null);
   const [monthlyReportMonth, setMonthlyReportMonth] = useState(null);
   const [registryOpen, setRegistryOpen] = useState(false);
@@ -3369,6 +3372,7 @@ export default function App() {
                       setSelectedDate(d.toISOString().slice(0, 10));
                     }}><ChevronRight size={15} /></button>
                   </div>
+                  <button className="ghost-button" disabled={!selectedClient} onClick={() => setShowQuickLog(v => !v)} title="Quickly log a call, note, or action"><Plus size={16} /> Quick Log</button>
                   <button className="secondary-button" onClick={() => setShowUpload((value) => !value)}><Upload size={16} /> Upload Daily Files</button>
                   <button className="ghost-button" disabled={!dailyImport} onClick={copyClientReport} title="Copy pre-formatted daily update for WhatsApp/Telegram">
                     <Copy size={16} />{copyDone ? ' Copied!' : ' Copy Update'}
@@ -3385,6 +3389,34 @@ export default function App() {
               </div>
 
               {showUpload || !dailyImport ? <UploadArea onParsed={handleParsedFiles} /> : null}
+
+              {showQuickLog && selectedClient && (
+                <form className="quick-log-panel" onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!quickLogText.trim()) return;
+                  handleAddActivity({
+                    id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                    type: quickLogType,
+                    text: quickLogText.trim(),
+                    accountName: '',
+                    createdAt: new Date().toISOString(),
+                  });
+                  setQuickLogText('');
+                  setShowQuickLog(false);
+                }}>
+                  <select value={quickLogType} onChange={e => setQuickLogType(e.target.value)}>
+                    {['Note','Call','Email','Payout','Alert','Other'].map(t => <option key={t}>{t}</option>)}
+                  </select>
+                  <input
+                    autoFocus
+                    value={quickLogText}
+                    placeholder="What happened? (call outcome, action taken, client feedback...)"
+                    onChange={e => setQuickLogText(e.target.value)}
+                  />
+                  <button className="primary-button" type="submit"><Plus size={14} /> Log</button>
+                  <button className="ghost-button" type="button" onClick={() => setShowQuickLog(false)}>Cancel</button>
+                </form>
+              )}
 
               {(() => {
                 const actions = buildTodayActions(selectedClient, dailyImport);
