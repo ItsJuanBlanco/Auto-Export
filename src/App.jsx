@@ -4589,9 +4589,11 @@ export default function App() {
     if (!selectedClient) return;
     setState((current) => {
       const clientData = (current.clients || []).find(c => c.id === selectedClient.id);
-      const existing = clientData?.accountRegistry?.[accountName]?.payoutHistory || [];
+      const reg = clientData?.accountRegistry || {};
+      const regKey = Object.keys(reg).find(k => k.toLowerCase() === accountName.toLowerCase()) || accountName;
+      const existing = reg[regKey]?.payoutHistory || [];
       const newHistory = [...existing, entry];
-      const prevCount = Number(clientData?.accountRegistry?.[accountName]?.payoutCount || 0);
+      const prevCount = Number(reg[regKey]?.payoutCount || 0);
       return upsertAccountMeta(current, selectedClient.id, accountName, {
         payoutHistory: newHistory,
         payoutCount: prevCount + 1,
