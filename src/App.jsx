@@ -1189,7 +1189,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     const unclosed = withUpload.filter(c => getClientImportByDate(c, today)?.status !== 'Closed').length;
     if (withUpload.length) score -= Math.round((unclosed / withUpload.length) * 25);
     // Deduct for critical flags
-    const critFlags = clients.reduce((n, c) => n + ((c.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved' && f.status !== 'Acknowledged' && f.status !== 'Acknowledged').length), 0);
+    const critFlags = clients.reduce((n, c) => n + ((c.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved' && f.status !== 'Acknowledged').length), 0);
     score -= Math.min(critFlags * 5, 25);
     // Deduct for overdue tasks
     const overdueTasks = clients.reduce((n, c) => n + (c.tasks || []).filter(t => !t.done && t.dueDate && t.dueDate < today).length, 0);
@@ -4712,7 +4712,7 @@ export default function App() {
 
   function closeImport() {
     if (!selectedClient || !dailyImport) return;
-    const flags = (dailyImport.flags || []).filter((f) => f.severity === 'Critical' && f.status !== 'Resolved' && f.status !== 'Acknowledged' && f.status !== 'Acknowledged');
+    const flags = (dailyImport.flags || []).filter((f) => f.severity === 'Critical' && f.status !== 'Resolved' && f.status !== 'Acknowledged');
     const msg = flags.length
       ? `This close has ${flags.length} unresolved critical flag${flags.length > 1 ? 's' : ''}. Close anyway?`
       : 'Mark this day as closed? This locks the close record.';
@@ -4735,7 +4735,7 @@ export default function App() {
     if (!toClose.length) { window.alert('No open imports for today — all clients are already closed or have no upload.'); return; }
     const critCount = toClose.reduce((n, c) => {
       const imp = getClientImportByDate(c, today);
-      return n + (imp?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved' && f.status !== 'Acknowledged' && f.status !== 'Acknowledged').length;
+      return n + (imp?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved' && f.status !== 'Acknowledged').length;
     }, 0);
     const msg = critCount
       ? `Close today for ${toClose.length} client${toClose.length !== 1 ? 's' : ''}? There are ${critCount} unresolved critical flag${critCount !== 1 ? 's' : ''} across these clients.`
