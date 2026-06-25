@@ -76,10 +76,11 @@ function getStreak() {
 function updateStreak(today, wasComplete, isNowComplete) {
   if (!isNowComplete || wasComplete) return;
   const streak = getStreak();
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
-  const newCount = streak.lastDate === yesterdayStr ? streak.count + 1 : 1;
+  // Step back to previous trading day (skip weekends) so Mon streak continues from Fri
+  const prev = new Date();
+  do { prev.setDate(prev.getDate() - 1); } while ([0, 6].includes(prev.getDay()));
+  const prevTradingDay = prev.toISOString().slice(0, 10);
+  const newCount = streak.lastDate === prevTradingDay ? streak.count + 1 : 1;
   localStorage.setItem('cam-sop-streak', JSON.stringify({ count: newCount, lastDate: today }));
 }
 
