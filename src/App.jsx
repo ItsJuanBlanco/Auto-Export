@@ -1044,7 +1044,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                 </thead>
                 <tbody>
                   {allFunded.map((row) => (
-                    <tr key={row.accountName} className={row.bufferPct !== null && row.bufferPct <= 20 ? 'row-highlight' : ''} style={{cursor:'pointer'}} onClick={() => onOpenCam(camProfiles.find(c => c.clientIds?.includes(row.clientId))?.id)}>
+                    <tr key={row.accountName} className={row.bufferPct !== null && row.bufferPct <= 20 ? 'row-highlight' : ''} style={{cursor:'pointer'}} onClick={() => { const cam = camProfiles.find(c => c.clientIds?.includes(row.clientId)); onOpenCam(cam?.id, row.clientId); }}>
                       <td><strong>{row.alias}</strong><small>{row.connection}</small></td>
                       <td>{row.clientName}</td>
                       <td><small>{row.camName}</small></td>
@@ -3060,8 +3060,11 @@ export default function App() {
     setShowOverview(false); setShowSOP(false);
   }
 
-  function openCamWorkspace(camId = 'am-pedro') {
-    setState((current) => selectCam(current, camId));
+  function openCamWorkspace(camId = 'am-pedro', clientId = null) {
+    setState((current) => {
+      const next = selectCam(current, camId);
+      return clientId ? { ...next, selectedClientId: clientId } : next;
+    });
     setPlatformView('cam');
     setShowOverview(false); setShowSOP(false);
     setRegistryOpen(false);
