@@ -1052,7 +1052,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   const [showNewClient, setShowNewClient] = useState(false);
   const [fundedSort, setFundedSort] = useState({ col: 'buffer', dir: -1 });
   const [managerSearch, setManagerSearch] = useState('');
-  const teamHistory = buildTeamHistory(clients);
+  const teamHistory = buildTeamHistory(clients).slice(-10);
   const cams = (camProfiles.length ? camProfiles : createDemoState().camProfiles).map((profile) => {
     const summary = buildManagerSummary(clientsForCam(clients, profile));
     return { ...profile, ...summary, flags: summary.openFlags };
@@ -1615,7 +1615,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
         )}
 
         <section className="panel">
-          <div className="panel-heading"><h3>7-day team history</h3><span className="badge muted">Historical closes</span></div>
+          <div className="panel-heading"><h3>Recent team history</h3><span className="badge muted">Last 10 trading days</span></div>
           <div className="history-strip">
             {teamHistory.map((day) => (
               <div className="history-day" key={day.date}>
