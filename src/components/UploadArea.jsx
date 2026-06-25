@@ -28,6 +28,8 @@ export default function UploadArea({ onParsed }) {
         parsed.push(parseNinjaTraderCsvText(text, file.name));
       }
       setParsedFiles(parsed);
+      const parseWarnings = parsed.flatMap(f => (f.errors || []).map(e => `${f.fileName}: ${e.message || e.code}`));
+      if (parseWarnings.length) setError(`Parse warnings (data may be incomplete): ${parseWarnings.slice(0,3).join('; ')}`);
 
       const grouped = parsed.reduce(
         (acc, item) => {
