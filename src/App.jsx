@@ -1359,16 +1359,17 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                 } catch { /* skip unreadable file */ }
               }
               const grouped = parsed.reduce((acc, p) => { if (p.type !== 'unknown') acc[p.type] = [...(acc[p.type] || []), ...p.rows]; return acc; }, {});
-              const accountNames = new Set((grouped.accounts || []).map(a => a.accountName));
-              if (!accountNames.size) { setBatchImportResult({ error: 'No account data found in the uploaded files. Make sure to include the NT Accounts CSV.' }); return; }
+              const accountNamesLower = new Set((grouped.accounts || []).map(a => a.accountName.toLowerCase()));
+              if (!accountNamesLower.size) { setBatchImportResult({ error: 'No account data found in the uploaded files. Make sure to include the NT Accounts CSV.' }); return; }
               const clientMatches = clients.map(client => {
-                const myAccounts = Object.keys(client.accountRegistry || {}).filter(an => accountNames.has(an));
+                const myAccounts = Object.keys(client.accountRegistry || {}).filter(an => accountNamesLower.has(an.toLowerCase()));
                 if (!myAccounts.length) return null;
+                const myAccountsLower = new Set(myAccounts.map(a => a.toLowerCase()));
                 const filteredGrouped = {
-                  accounts: (grouped.accounts || []).filter(a => myAccounts.includes(a.accountName)),
-                  strategies: (grouped.strategies || []).filter(a => myAccounts.includes(a.accountName)),
-                  orders: (grouped.orders || []).filter(a => myAccounts.includes(a.accountName)),
-                  executions: (grouped.executions || []).filter(a => myAccounts.includes(a.accountName)),
+                  accounts: (grouped.accounts || []).filter(a => myAccountsLower.has(a.accountName.toLowerCase())),
+                  strategies: (grouped.strategies || []).filter(a => myAccountsLower.has(a.accountName.toLowerCase())),
+                  orders: (grouped.orders || []).filter(a => myAccountsLower.has(a.accountName.toLowerCase())),
+                  executions: (grouped.executions || []).filter(a => myAccountsLower.has(a.accountName.toLowerCase())),
                 };
                 try {
                   const result = reconcileDailyImport({ clientId: client.id, date: today, registry: client.accountRegistry, parsed: filteredGrouped });
@@ -1392,10 +1393,10 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                     try { const text = await new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(String(r.result)); r.onerror=rej; r.readAsText(f); }); parsed.push(parseNinjaTraderCsvText(text, f.name)); } catch {}
                   }
                   const grouped = parsed.reduce((acc,p) => { if (p.type!=='unknown') acc[p.type]=[...(acc[p.type]||[]),...p.rows]; return acc; }, {});
-                  const accountNames = new Set((grouped.accounts||[]).map(a=>a.accountName));
-                  if (!accountNames.size) { setBatchImportResult({ error: 'No account data found.' }); return; }
-                  const clientMatches = clients.map(client => { const myAccounts=Object.keys(client.accountRegistry||{}).filter(an=>accountNames.has(an)); if (!myAccounts.length) return null; const fg={accounts:(grouped.accounts||[]).filter(a=>myAccounts.includes(a.accountName)),strategies:(grouped.strategies||[]).filter(a=>myAccounts.includes(a.accountName)),orders:(grouped.orders||[]).filter(a=>myAccounts.includes(a.accountName)),executions:(grouped.executions||[]).filter(a=>myAccounts.includes(a.accountName))}; try { return {client,result:reconcileDailyImport({clientId:client.id,date:today,registry:client.accountRegistry,parsed:fg}),accountCount:myAccounts.length}; } catch { return null; } }).filter(Boolean);
-                  setBatchImportResult({ clientMatches, unmatched:[...accountNames].filter(an=>!clients.some(c=>Object.keys(c.accountRegistry||{}).includes(an))), today, filesLoaded:files.length });
+                  const accountNamesLower2 = new Set((grouped.accounts||[]).map(a=>a.accountName.toLowerCase()));
+                  if (!accountNamesLower2.size) { setBatchImportResult({ error: 'No account data found.' }); return; }
+                  const clientMatches = clients.map(client => { const myAccounts=Object.keys(client.accountRegistry||{}).filter(an=>accountNamesLower2.has(an.toLowerCase())); if (!myAccounts.length) return null; const mal=new Set(myAccounts.map(a=>a.toLowerCase())); const fg={accounts:(grouped.accounts||[]).filter(a=>mal.has(a.accountName.toLowerCase())),strategies:(grouped.strategies||[]).filter(a=>mal.has(a.accountName.toLowerCase())),orders:(grouped.orders||[]).filter(a=>mal.has(a.accountName.toLowerCase())),executions:(grouped.executions||[]).filter(a=>mal.has(a.accountName.toLowerCase()))}; try { return {client,result:reconcileDailyImport({clientId:client.id,date:today,registry:client.accountRegistry,parsed:fg}),accountCount:myAccounts.length}; } catch { return null; } }).filter(Boolean);
+                  setBatchImportResult({ clientMatches, unmatched:[...(new Set((grouped.accounts||[]).map(a=>a.accountName)))].filter(an=>!clients.some(c=>Object.keys(c.accountRegistry||{}).map(k=>k.toLowerCase()).includes(an.toLowerCase()))), today, filesLoaded:files.length });
                 }} />
               </label>
             </div>
