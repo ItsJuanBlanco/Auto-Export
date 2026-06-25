@@ -4353,6 +4353,20 @@ export default function App() {
     try { if (user) sessionStorage.setItem('cam_crm_session', JSON.stringify(user)); else sessionStorage.removeItem('cam_crm_session'); } catch {}
   }
   const [platformView, setPlatformView] = useState('manager');
+  // On mount: if session was restored, re-validate and restore workspace
+  useEffect(() => {
+    if (!session) return;
+    const live = (users || []).find(u => u.id === session.id);
+    if (!live) { persistSession(null); return; } // user deleted
+    const fresh = { ...live };
+    persistSession(fresh);
+    if (fresh.role === USER_ROLES.CAM && fresh.camProfileId) {
+      openCamWorkspace(fresh.camProfileId);
+    } else {
+      setPlatformView('manager');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [newClientName, setNewClientName] = useState('');
   const [clientSearch, setClientSearch] = useState('');
   const [viewedClientIds, setViewedClientIds] = useState(new Set());
