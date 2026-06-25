@@ -908,6 +908,25 @@ textarea {
   -webkit-box-orient: vertical;
 }
 
+.quick-task-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.quick-task-inline input, .quick-task-inline select {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 8px;
+  min-width: 0;
+}
+.quick-task-inline input[type="text"] { flex: 1 1 120px; }
+
 .team-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(160px, 1fr));

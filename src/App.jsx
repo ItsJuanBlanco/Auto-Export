@@ -2649,8 +2649,12 @@ function buildIncomeProjection(clients = []) {
   return rows.sort((a, b) => b.pct - a.pct);
 }
 
-function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient }) {
+function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
+  const [quickTaskClientId, setQuickTaskClientId] = useState(null);
+  const [quickTaskText, setQuickTaskText] = useState('');
+  const [quickTaskDue, setQuickTaskDue] = useState('');
+  const [quickTaskPriority, setQuickTaskPriority] = useState('Normal');
   const overview = buildCamOverview(clients, strategySetRecords);
   const displayName = camName || 'this workspace';
   const briefing = buildTodayBriefing(clients);
@@ -2819,11 +2823,13 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
             {briefing.map(({ client, criticalFlags, openFlags, openTasks, overdueTasks, highTasks, payoutAccounts, dailyPnl, closeStatus, urgency }) => {
               const nextTask = overdueTasks[0] || highTasks[0] || openTasks[0] || null;
               const nextFlag = criticalFlags[0] || null;
+              const isQT = quickTaskClientId === client.id;
               return (
-                <button
+                <div
                   key={client.id}
                   className={`briefing-card briefing-${urgency}`}
-                  onClick={() => onSelectClient && onSelectClient(client.id)}
+                  style={{cursor:'pointer'}}
+                  onClick={() => { if (!isQT) onSelectClient && onSelectClient(client.id); }}
                 >
                   <div className="briefing-card-head">
                     <strong>{client.name}</strong>
@@ -2847,7 +2853,25 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
                       {!nextFlag && nextTask ? `→ ${nextTask.text.slice(0, 80)}${nextTask.text.length > 80 ? '…' : ''}` : null}
                     </p>
                   ) : null}
-                </button>
+                  {isQT ? (
+                    <form className="quick-task-inline" onClick={e => e.stopPropagation()} onSubmit={e => {
+                      e.preventDefault();
+                      if (!quickTaskText.trim()) return;
+                      onAddClientTask?.(client.id, { id: `task-${Date.now()}`, text: quickTaskText.trim(), priority: quickTaskPriority, dueDate: quickTaskDue || null, done: false, createdAt: new Date().toISOString() });
+                      setQuickTaskText(''); setQuickTaskDue(''); setQuickTaskPriority('Normal'); setQuickTaskClientId(null);
+                    }}>
+                      <input autoFocus value={quickTaskText} onChange={e => setQuickTaskText(e.target.value)} placeholder="Task description…" style={{flex:1}} />
+                      <input type="date" value={quickTaskDue} onChange={e => setQuickTaskDue(e.target.value)} style={{width:120}} />
+                      <select value={quickTaskPriority} onChange={e => setQuickTaskPriority(e.target.value)} style={{width:80}}>
+                        <option>Normal</option><option>High</option><option>Low</option>
+                      </select>
+                      <button type="submit" className="primary-button" style={{padding:'4px 10px'}}>Add</button>
+                      <button type="button" className="ghost-button" onClick={() => { setQuickTaskClientId(null); setQuickTaskText(''); }}>✕</button>
+                    </form>
+                  ) : (
+                    <button className="ghost-button" style={{fontSize:11,marginTop:4,alignSelf:'flex-start'}} onClick={e => { e.stopPropagation(); setQuickTaskClientId(client.id); setQuickTaskText(''); }}>+ Task</button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -4076,6 +4100,7 @@ export default function App() {
             setState((current) => selectClient(current, clientId));
             setShowOverview(false); setShowSOP(false);
           }}
+          onAddClientTask={(clientId, task) => setState((current) => addTask(current, clientId, task))}
         />
       ) : (
         <main className="content">
