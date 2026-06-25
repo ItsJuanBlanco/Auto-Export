@@ -1091,6 +1091,29 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     setEditUserPatch({});
   }
 
+  const healthScore = (() => {
+    if (!clients.length) return null;
+    let score = 100;
+    const today = todayIsoDate();
+    // Deduct for unclosed clients with uploads
+    const withUpload = clients.filter(c => getClientImportByDate(c, today));
+    const unclosed = withUpload.filter(c => getClientImportByDate(c, today)?.status !== 'Closed').length;
+    if (withUpload.length) score -= Math.round((unclosed / withUpload.length) * 25);
+    // Deduct for critical flags
+    const critFlags = clients.reduce((n, c) => n + ((c.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved').length), 0);
+    score -= Math.min(critFlags * 5, 25);
+    // Deduct for overdue tasks
+    const overdueTasks = clients.reduce((n, c) => n + (c.tasks || []).filter(t => !t.done && t.dueDate && t.dueDate < today).length, 0);
+    score -= Math.min(overdueTasks * 3, 20);
+    // Deduct for accounts at critical drawdown (buffer <= 10%)
+    const critBufferAccounts = allFunded.filter(r => r.bufferPct !== null && r.bufferPct <= 10).length;
+    score -= Math.min(critBufferAccounts * 5, 20);
+    const clamped = Math.max(0, Math.min(100, score));
+    const label = clamped >= 85 ? 'Excellent' : clamped >= 70 ? 'Good' : clamped >= 50 ? 'Fair' : 'At Risk';
+    const color = clamped >= 85 ? 'var(--green)' : clamped >= 70 ? 'var(--accent)' : clamped >= 50 ? '#f59e0b' : 'var(--negative)';
+    return { score: clamped, label, color };
+  })();
+
   return (
     <main className="manager-shell">
       <aside className="manager-sidebar">
@@ -1171,6 +1194,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           <div className="metric"><span>Closes today</span><strong style={{fontSize:22}}>{monthlyKpis.closedToday}<span style={{fontSize:14,fontWeight:400,color:'var(--muted)'}}> / {monthlyKpis.withUploadToday}</span></strong></div>
           <div className="metric"><span>Clients</span><strong>{totals.clients}</strong></div>
           <div className="metric"><span>Open flags</span><strong className={totals.flags ? 'negative' : ''}>{totals.flags}</strong></div>
+          {healthScore && (
+            <div className="metric" style={{borderColor: healthScore.color, background:`${healthScore.color}0d`}}>
+              <span>Portfolio health</span>
+              <strong style={{fontSize:28, color: healthScore.color}}>{healthScore.score}</strong>
+              <small style={{color: healthScore.color, fontWeight:600}}>{healthScore.label}</small>
+            </div>
+          )}
         </div>
 
         {showPipeline && (() => {
