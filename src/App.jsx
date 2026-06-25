@@ -77,6 +77,53 @@ function deriveClientBadge(client) {
   return { label: latest.status || 'Ready', tone: 'success' };
 }
 
+function lastContactDaysAgo(client) {
+  const log = client.activityLog || [];
+  if (!log.length) return null;
+  const latest = log.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+  if (!latest.createdAt) return null;
+  const diff = Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 86400000);
+  return diff;
+}
+
+function buildTodayActions(client, dailyImport) {
+  const today = todayIsoDate();
+  const actions = [];
+
+  // Overdue tasks
+  const overdue = (client.tasks || []).filter((t) => !t.done && t.dueDate && t.dueDate < today);
+  for (const t of overdue.slice(0, 3)) {
+    actions.push({ severity: 'critical', icon: '⏰', text: `Overdue: ${t.text.slice(0, 80)}${t.text.length > 80 ? '…' : ''}` });
+  }
+
+  // Tasks due today
+  const dueToday = (client.tasks || []).filter((t) => !t.done && t.dueDate === today);
+  for (const t of dueToday.slice(0, 2)) {
+    actions.push({ severity: 'warning', icon: '📋', text: `Due today: ${t.text.slice(0, 80)}${t.text.length > 80 ? '…' : ''}` });
+  }
+
+  // Critical flags
+  const critFlags = (dailyImport?.flags || []).filter((f) => f.severity === 'Critical' && f.status !== 'Resolved');
+  for (const f of critFlags.slice(0, 2)) {
+    actions.push({ severity: 'critical', icon: '🚨', text: `Flag: ${f.message.slice(0, 90)}${f.message.length > 90 ? '…' : ''}` });
+  }
+
+  // No close today
+  if (!dailyImport) {
+    actions.push({ severity: 'warning', icon: '📂', text: `No daily close uploaded yet for ${today}` });
+  }
+
+  // Payout alerts
+  if (dailyImport) {
+    const payouts = buildPayoutAlerts(client, dailyImport);
+    for (const p of payouts.filter((x) => x.ready).slice(0, 2)) {
+      actions.push({ severity: 'info-green', icon: '💰', text: `Payout ready: ${p.alias} reached ${Math.round((p.profit / p.target) * 100)}% of target` });
+    }
+  }
+
+  return actions;
+}
+
 function filteredAccountsForTab(client, dailyImport, tab) {
   const accounts = {
     ...(dailyImport?.accounts || {}),
@@ -3031,7 +3078,7 @@ export default function App() {
                     onClick={() => { setState((current) => selectClient(current, client.id)); setShowOverview(false); setShowSOP(false); }}
                   >
                     <span className={`close-dot close-dot-${closeStatus}`} title={closeStatus === 'no-close' ? 'No files today' : closeStatus === 'closed' ? 'Closed today' : 'Uploaded · not closed'} />
-                    <span>{client.name}</span>
+                    <span>{client.name}{(() => { const d = lastContactDaysAgo(client); return d !== null && d > 3 ? <span className="last-contact-dot" title={`Last contact ${d}d ago`} style={{ background: d > 7 ? 'var(--red)' : 'var(--yellow)' }} /> : null; })()}</span>
                     <em className={badge.tone}>{badge.label}</em>
                   </button>
                 );
@@ -3104,6 +3151,21 @@ export default function App() {
               </div>
 
               {showUpload || !dailyImport ? <UploadArea onParsed={handleParsedFiles} /> : null}
+
+              {(() => {
+                const actions = buildTodayActions(selectedClient, dailyImport);
+                if (!actions.length) return null;
+                return (
+                  <div className="today-banner">
+                    {actions.map((a, i) => (
+                      <div key={i} className={`today-banner-item today-banner-${a.severity}`}>
+                        <span>{a.icon}</span>
+                        <span>{a.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               <div className="tabs">
                 {visibleTabs.map((tab) => (

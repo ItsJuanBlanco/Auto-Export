@@ -1825,3 +1825,14 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 /* Algo note input in stack playbook config table */
 .algo-note-input { font-size: 12px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--text); width: 100%; min-width: 140px; }
 .algo-note-input::placeholder { color: var(--muted); }
+
+/* Last contact dot in sidebar */
+.last-contact-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-left: 5px; vertical-align: middle; flex-shrink: 0; }
+
+/* Today's Action Banner */
+.today-banner { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.today-banner-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; border-left: 3px solid; }
+.today-banner-critical   { background: rgba(255,90,105,0.08);  border-color: var(--red);    color: var(--text); }
+.today-banner-warning    { background: rgba(244,187,68,0.08);  border-color: var(--yellow); color: var(--text); }
+.today-banner-info-green { background: rgba(47,202,115,0.08);  border-color: var(--green);  color: var(--text); }
+.today-banner-info       { background: rgba(69,163,255,0.08);  border-color: var(--blue);   color: var(--text); }
