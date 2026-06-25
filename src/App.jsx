@@ -3187,7 +3187,7 @@ function buildIncomeProjection(clients = []) {
   return rows.sort((a, b) => b.pct - a.pct);
 }
 
-function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask, monthlyGoal: monthlyGoalProp = 0, onSetMonthlyGoal }) {
+function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask, onCompleteTask, monthlyGoal: monthlyGoalProp = 0, onSetMonthlyGoal }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
   const [showBulkTask, setShowBulkTask] = useState(false);
   const [bulkTaskText, setBulkTaskText] = useState('');
@@ -3527,6 +3527,7 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
               <table className="ops-table">
                 <thead>
                   <tr>
+                    <th></th>
                     <th>Task</th>
                     <th>Client</th>
                     <th>Priority</th>
@@ -3541,12 +3542,13 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
                     return (
                       <tr
                         key={task.id}
-                        className={isOverdue ? 'row-warning clickable-row' : 'clickable-row'}
-                        onClick={() => onSelectClient && onSelectClient(task.clientId)}
-                        title={`Open ${task.clientName} → Tasks`}
+                        className={isOverdue ? 'row-warning' : ''}
                       >
-                        <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.text}</td>
-                        <td><strong>{task.clientName}</strong></td>
+                        <td style={{width:28}}>
+                          <button className="ghost-button" style={{padding:'2px 4px',fontSize:14,lineHeight:1}} title="Mark done" onClick={() => onCompleteTask?.(task.clientId, task.id)}>☐</button>
+                        </td>
+                        <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor:'pointer' }} onClick={() => onSelectClient && onSelectClient(task.clientId)} title={`Open ${task.clientName} → Tasks`}>{task.text}</td>
+                        <td><strong style={{cursor:'pointer'}} onClick={() => onSelectClient && onSelectClient(task.clientId)}>{task.clientName}</strong></td>
                         <td>
                           <span className={task.priority === 'High' ? 'task-chip task-chip-high' : 'task-chip'}>
                             {task.priority}
@@ -4902,6 +4904,7 @@ export default function App() {
             setShowOverview(false); setShowSOP(false);
           }}
           onAddClientTask={(clientId, task) => setState((current) => addTask(current, clientId, task))}
+          onCompleteTask={(clientId, taskId) => setState((current) => updateTask(current, clientId, taskId, { done: true, doneAt: new Date().toISOString() }))}
           monthlyGoal={currentCamProfile?.monthlyGoal || 0}
           onSetMonthlyGoal={goal => setState(s => updateCamProfile(s, currentCamProfile?.id, { monthlyGoal: goal }))}
         />
