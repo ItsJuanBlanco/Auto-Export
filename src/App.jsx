@@ -2657,6 +2657,12 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
     return { total: clients.length, withUpload: withUpload.length, closed: closed.length };
   })();
   const closePct = closeStats.total ? Math.round((closeStats.closed / closeStats.total) * 100) : 0;
+  const todayPortfolioPnl = clients.reduce((sum, c) => {
+    const imp = getClientImportByDate(c, today) || c.dailyImports?.at(-1);
+    return sum + (imp?.snapshots || []).reduce((s, sn) => s + Number(sn.grossRealizedPnl || 0), 0);
+  }, 0);
+  const openTasksToday = clients.reduce((n, c) => n + (c.tasks || []).filter(t => !t.done && t.dueDate === today).length, 0);
+  const overdueTotal = clients.reduce((n, c) => n + (c.tasks || []).filter(t => !t.done && t.dueDate && t.dueDate < today).length, 0);
 
   return (
     <main className="content">
@@ -2673,6 +2679,21 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
           <div style={{marginTop:8,background:'var(--line)',borderRadius:4,height:6,width:220,overflow:'hidden'}}>
             <div style={{height:'100%',width:`${closePct}%`,background:closePct===100?'var(--green)':'var(--accent)',transition:'width .4s ease',borderRadius:4}} />
           </div>
+        </div>
+        <div className="header-actions" style={{alignSelf:'flex-end',gap:12}}>
+          <div className="metric" style={{minWidth:120,textAlign:'right'}}>
+            <span>Portfolio P&L today</span>
+            <strong className={todayPortfolioPnl >= 0 ? 'positive' : 'negative'} style={{fontSize:22}}>{formatCurrency(todayPortfolioPnl)}</strong>
+          </div>
+          {(openTasksToday > 0 || overdueTotal > 0) && (
+            <div className="metric" style={{textAlign:'right'}}>
+              <span>Tasks</span>
+              <strong>
+                {overdueTotal > 0 && <span className="negative">{overdueTotal} overdue </span>}
+                {openTasksToday > 0 && <span>{openTasksToday} due today</span>}
+              </strong>
+            </div>
+          )}
         </div>
       </div>
 
