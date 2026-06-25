@@ -15,7 +15,7 @@ const PAYOUT_OPTIONS = Object.values(PAYOUT_STATES);
 const PASS_TYPES = ['', '1-day pass', '2-day pass', '3-day pass'];
 const DIRECTIONS = ['', 'Long', 'Short'];
 
-export default function AccountManager({ accounts, snapshots, onUpdateAccount, onAddAccount, mode }) {
+export default function AccountManager({ accounts, snapshots, onUpdateAccount, onAddAccount, onRemoveAccount, mode }) {
   const isCash = mode === 'cash';
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState(ACCOUNT_TYPES.FUNDED);
@@ -76,6 +76,7 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount, o
             {!isCash ? <th>Last Payout $</th> : null}
             {!isCash ? <th># Payouts</th> : null}
             <th>Notes</th>
+            {onRemoveAccount ? <th></th> : null}
           </tr>
         </thead>
         <tbody>
@@ -221,6 +222,9 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount, o
                   onChange={(event) => onUpdateAccount(account.accountName, { notes: event.target.value })}
                 />
               </td>
+              {onRemoveAccount ? (
+                <td><button className="ghost-button" style={{color:'var(--negative)',fontSize:11,padding:'2px 6px'}} title="Remove from registry" onClick={() => onRemoveAccount(account.accountName)}>✕</button></td>
+              ) : null}
             </tr>
           ))}
         </tbody>

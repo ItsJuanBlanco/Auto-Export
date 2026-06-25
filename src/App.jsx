@@ -55,6 +55,7 @@ import {
   upsertAccountMeta,
   getStorageUsageKB,
   updateCamProfile,
+  removeAccountFromRegistry,
 } from './domain/demoStore';
 import { buildCamOverview } from './domain/camOverview';
 import { recalculateDailyImport, reconcileDailyImport } from './domain/reconcile';
@@ -5115,6 +5116,11 @@ export default function App() {
                         onAddAccount={(accountName, meta) => {
                           if (!selectedClient || !accountName.trim()) return;
                           setState((current) => upsertAccountMeta(current, selectedClient.id, accountName.trim(), meta));
+                        }}
+                        onRemoveAccount={(accountName) => {
+                          if (!selectedClient) return;
+                          if (!window.confirm(`Remove "${accountName}" from the registry? Historical import data is kept, but the account metadata (type, alias, targets) will be deleted.`)) return;
+                          setState((current) => removeAccountFromRegistry(current, selectedClient.id, accountName));
                         }}
                       />
                     ) : null}

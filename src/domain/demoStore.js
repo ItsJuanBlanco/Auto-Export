@@ -507,6 +507,13 @@ export function deleteActivityEntry(state, clientId, entryId) {
   }));
 }
 
+export function removeAccountFromRegistry(state, clientId, accountName) {
+  return updateClient(state, clientId, (client) => {
+    const { [accountName]: _, ...rest } = client.accountRegistry || {};
+    return { ...client, accountRegistry: rest };
+  });
+}
+
 export function upsertAccountMeta(state, clientId, accountName, patch) {
   return updateClient(state, clientId, (client) => {
     const existing = client.accountRegistry[accountName] || { accountName };
