@@ -1040,6 +1040,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   const [showPipeline, setShowPipeline] = useState(false);
   const [showBatchImport, setShowBatchImport] = useState(false);
   const [batchImportResult, setBatchImportResult] = useState(null);
+  const [drillDate, setDrillDate] = useState('');
   const [teamCopyDone, setTeamCopyDone] = useState(false);
   const [fundedSort, setFundedSort] = useState({ col: 'buffer', dir: -1 });
   const [managerSearch, setManagerSearch] = useState('');
@@ -1732,6 +1733,49 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             </section>
           );
         })()}
+
+        <section className="panel">
+          <div className="panel-heading">
+            <h3>Historical date drill-down</h3>
+            <input type="date" value={drillDate} onChange={e => setDrillDate(e.target.value)} style={{marginLeft:'auto',fontSize:12,padding:'3px 8px',borderRadius:6,border:'1px solid var(--line)',background:'var(--surface)',color:'var(--text)'}} />
+            {drillDate && <button className="ghost-button" style={{fontSize:11}} onClick={() => setDrillDate('')}>Clear</button>}
+          </div>
+          {!drillDate && <p className="muted" style={{fontSize:12}}>Pick a date to see every client's P&L, accounts, and flags for that day.</p>}
+          {drillDate && (() => {
+            const drillRows = clients.map(client => {
+              const imp = (client.dailyImports || []).find(d => d.date === drillDate);
+              if (!imp) return null;
+              const pnl = (imp.snapshots || []).reduce((s, sn) => s + Number(sn.grossRealizedPnl || 0), 0);
+              const cam = camProfiles.find(p => (p.clientIds || []).includes(client.id));
+              return { client, cam, pnl, accounts: (imp.snapshots || []).length, flags: (imp.flags || []).filter(f => f.severity === 'Critical').length };
+            }).filter(Boolean);
+            if (!drillRows.length) return <p className="muted" style={{fontSize:12}}>No data uploaded for {drillDate}.</p>;
+            const total = drillRows.reduce((s, r) => s + r.pnl, 0);
+            return (
+              <div className="table-wrap">
+                <table className="ops-table">
+                  <thead><tr><th>Client</th><th>CAM</th><th>Accounts</th><th>Daily P&L</th><th>Critical flags</th></tr></thead>
+                  <tbody>
+                    {drillRows.sort((a, b) => b.pnl - a.pnl).map(({ client, cam, pnl, accounts, flags }) => (
+                      <tr key={client.id} style={{cursor:'pointer'}} onClick={() => onOpenCam(cam?.id, client.id)}>
+                        <td><strong>{client.name}</strong></td>
+                        <td className="muted">{cam?.name || '—'}</td>
+                        <td>{accounts}</td>
+                        <td className={pnl >= 0 ? 'positive' : 'negative'}><strong>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</strong></td>
+                        <td>{flags > 0 ? <span className="negative">{flags}</span> : <span className="muted">0</span>}</td>
+                      </tr>
+                    ))}
+                    <tr style={{borderTop:'2px solid var(--line)',fontWeight:700}}>
+                      <td colSpan={3}>Total — {drillRows.length} clients</td>
+                      <td className={total >= 0 ? 'positive' : 'negative'}>{total >= 0 ? '+' : ''}{formatCurrency(total)}</td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </section>
 
         <section className="panel">
           <div className="panel-heading"><h3>Exception rules</h3><span className="badge muted">Auto-detected flags</span></div>
