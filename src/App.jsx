@@ -2904,6 +2904,11 @@ function buildIncomeProjection(clients = []) {
 
 function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
+  const [showBulkTask, setShowBulkTask] = useState(false);
+  const [bulkTaskText, setBulkTaskText] = useState('');
+  const [bulkTaskDue, setBulkTaskDue] = useState('');
+  const [bulkTaskPriority, setBulkTaskPriority] = useState('Normal');
+  const [bulkTaskTargets, setBulkTaskTargets] = useState([]);
   const [quickTaskClientId, setQuickTaskClientId] = useState(null);
   const [quickTaskText, setQuickTaskText] = useState('');
   const [quickTaskDue, setQuickTaskDue] = useState('');
@@ -3015,7 +3020,35 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
               <span className="count">{allOpenTasks.length} open</span>
               {overdue > 0 && <span className="badge danger">{overdue} overdue</span>}
               {dueToday > 0 && <span className="badge warning">{dueToday} due today</span>}
+              <button className="ghost-button" style={{marginLeft:'auto',fontSize:12}} onClick={() => { setShowBulkTask(v => !v); setBulkTaskTargets(clients.map(c => c.id)); }}>+ Bulk task</button>
             </div>
+            {showBulkTask && (
+              <form className="bulk-task-form" onSubmit={e => {
+                e.preventDefault();
+                if (!bulkTaskText.trim() || !bulkTaskTargets.length) return;
+                bulkTaskTargets.forEach(clientId => {
+                  onAddClientTask?.(clientId, { id: `task-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, text: bulkTaskText.trim(), priority: bulkTaskPriority, dueDate: bulkTaskDue || null, done: false, createdAt: new Date().toISOString() });
+                });
+                setBulkTaskText(''); setBulkTaskDue(''); setBulkTaskPriority('Normal'); setShowBulkTask(false);
+              }}>
+                <strong style={{fontSize:13,gridColumn:'1/-1'}}>Add task to multiple clients</strong>
+                <input autoFocus value={bulkTaskText} onChange={e => setBulkTaskText(e.target.value)} placeholder="Task description…" style={{gridColumn:'1/-1'}} />
+                <input type="date" value={bulkTaskDue} onChange={e => setBulkTaskDue(e.target.value)} />
+                <select value={bulkTaskPriority} onChange={e => setBulkTaskPriority(e.target.value)}>
+                  <option>Normal</option><option>High</option><option>Low</option>
+                </select>
+                <div style={{gridColumn:'1/-1',display:'flex',flexWrap:'wrap',gap:6}}>
+                  {clients.map(c => (
+                    <label key={c.id} style={{display:'flex',alignItems:'center',gap:4,fontSize:12,cursor:'pointer'}}>
+                      <input type="checkbox" checked={bulkTaskTargets.includes(c.id)} onChange={ev => setBulkTaskTargets(prev => ev.target.checked ? [...prev, c.id] : prev.filter(id => id !== c.id))} />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+                <button type="submit" className="primary-button" disabled={!bulkTaskText.trim() || !bulkTaskTargets.length}>Add to {bulkTaskTargets.length} client{bulkTaskTargets.length !== 1 ? 's' : ''}</button>
+                <button type="button" className="ghost-button" onClick={() => setShowBulkTask(false)}>Cancel</button>
+              </form>
+            )}
             <div className="task-list">
               {allOpenTasks.slice(0, 20).map(task => {
                 const isOverdue = task.dueDate && task.dueDate < today;
