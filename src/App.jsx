@@ -332,6 +332,45 @@ function buildClientOverview(client, dailyImport) {
   };
 }
 
+function buildLifetimeStats(client) {
+  const imports = client.dailyImports || [];
+  if (!imports.length) return null;
+  const dailyPnls = imports.map(di =>
+    (di.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0)
+  );
+  const totalPnl = dailyPnls.reduce((s, v) => s + v, 0);
+  const positiveDays = dailyPnls.filter(v => v > 0).length;
+  const negativeDays = dailyPnls.filter(v => v < 0).length;
+  const bestDay = Math.max(...dailyPnls);
+  const worstDay = Math.min(...dailyPnls);
+  const bestDayDate = imports[dailyPnls.indexOf(bestDay)]?.date;
+  const worstDayDate = imports[dailyPnls.indexOf(worstDay)]?.date;
+  const winRate = imports.length ? Math.round((positiveDays / imports.length) * 100) : 0;
+  const avgDay = imports.length ? totalPnl / imports.length : 0;
+
+  // Current positive/negative streak
+  let streak = 0;
+  let streakType = null;
+  for (let i = dailyPnls.length - 1; i >= 0; i--) {
+    const positive = dailyPnls[i] > 0;
+    if (streakType === null) { streakType = positive; streak = 1; }
+    else if (positive === streakType) streak++;
+    else break;
+  }
+
+  const profile = client.profile || {};
+  const startDate = profile.startDate || imports[0]?.date;
+  const daysSinceStart = startDate
+    ? Math.floor((Date.now() - new Date(startDate + 'T12:00:00').getTime()) / 86400000)
+    : null;
+
+  return {
+    totalDays: imports.length, totalPnl, positiveDays, negativeDays,
+    winRate, avgDay, bestDay, worstDay, bestDayDate, worstDayDate,
+    streak, streakType, daysSinceStart, startDate,
+  };
+}
+
 function buildMonthlyTotals(client) {
   const byMonth = {};
   for (const di of client.dailyImports || []) {
@@ -1734,6 +1773,7 @@ function PayoutHistoryPanel({ funded, grandTotal, onLogPayout }) {
 function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthlyReport, onLogPayout }) {
   const [monthlyExpanded, setMonthlyExpanded] = useState('');
   const overview = buildClientOverview(client, dailyImport);
+  const lifetime = buildLifetimeStats(client);
   const maxDistribution = Math.max(...overview.distribution.map((item) => item.count), 1);
   const disconnectAlerts = buildDisconnectAlerts(client);
   const consistencyWarnings = buildConsistencyWarnings(client);
@@ -1764,6 +1804,16 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
         <div className="metric"><span>Change vs prior close</span><strong className={overview.metrics.dailyDelta >= 0 ? 'positive' : 'negative'}>{formatCurrency(overview.metrics.dailyDelta)}</strong></div>
         <div className="metric"><span>Accounts tracked</span><strong>{overview.metrics.accounts}</strong></div>
         <div className="metric"><span>Open flags</span><strong>{overview.metrics.openFlags}</strong></div>
+        {lifetime && <>
+          <div className="metric"><span>Lifetime P&L</span><strong className={lifetime.totalPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(lifetime.totalPnl)}</strong></div>
+          <div className="metric"><span>Win rate</span><strong className={lifetime.winRate >= 60 ? 'positive' : lifetime.winRate < 40 ? 'negative' : ''}>{lifetime.winRate}%</strong></div>
+          <div className="metric"><span>Avg day</span><strong className={lifetime.avgDay >= 0 ? 'positive' : 'negative'}>{formatCurrency(lifetime.avgDay)}</strong></div>
+          <div className="metric"><span>Days traded</span><strong>{lifetime.totalDays}</strong></div>
+          <div className="metric"><span>Best day</span><strong className="positive">{formatCurrency(lifetime.bestDay)}<small className="muted"> {lifetime.bestDayDate}</small></strong></div>
+          <div className="metric"><span>Worst day</span><strong className="negative">{formatCurrency(lifetime.worstDay)}<small className="muted"> {lifetime.worstDayDate}</small></strong></div>
+          <div className="metric"><span>Current streak</span><strong className={lifetime.streakType ? 'positive' : 'negative'}>{lifetime.streak}d {lifetime.streakType ? 'positive' : 'negative'}</strong></div>
+          {lifetime.daysSinceStart !== null && <div className="metric"><span>Days as client</span><strong>{lifetime.daysSinceStart}d{lifetime.startDate ? <small className="muted"> since {lifetime.startDate}</small> : null}</strong></div>}
+        </>}
       </div>
 
       <section className="panel client-overview-hero">
