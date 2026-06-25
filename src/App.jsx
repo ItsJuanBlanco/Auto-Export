@@ -2113,6 +2113,11 @@ function MonthlyReportPanel({ client, month, onClose }) {
 
 function ReportPanel({ client, dailyImport, onClose }) {
   const report = buildDailyReportSummary(client, dailyImport);
+  const [msgCopied, setMsgCopied] = useState(false);
+  function copyWhatsApp() {
+    const msg = buildClientMessageReport(client, dailyImport);
+    navigator.clipboard.writeText(msg).then(() => { setMsgCopied(true); setTimeout(() => setMsgCopied(false), 2500); });
+  }
   const dailyDelta = report.priorDailyPnl !== null
     ? report.totals.grossRealizedPnl - report.priorDailyPnl
     : null;
@@ -2153,6 +2158,7 @@ function ReportPanel({ client, dailyImport, onClose }) {
       <div className="report-sheet">
         <div className="report-actions no-print">
           <button className="secondary-button" onClick={() => window.print()}>Print / Save PDF</button>
+          <button className="ghost-button" onClick={copyWhatsApp}>{msgCopied ? '✓ Copied!' : '📱 Copy for WhatsApp'}</button>
           <button className="ghost-button" onClick={onClose}>Close</button>
         </div>
 
