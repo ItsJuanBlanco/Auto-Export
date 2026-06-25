@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cam_crm_demo_state_v1';
-const DEMO_STATE_VERSION = 11;
+const DEMO_STATE_VERSION = 12;
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -160,11 +160,11 @@ function demoClient({ id, name, registry, snapshots, executions, flags, activity
     },
     profile: {
       fullName: name + ' (demo)',
-      email: name.toLowerCase().replace(/\s+/g, '.') + '@email.com',
-      phone: '',
+      email: name.toLowerCase().replace(/\s+/g, '.') + '@vinceretrading.com',
+      phone: '+1 (312) 555-0100',
       timezone: 'America/Chicago',
       propFirm: 'Apex Trader Funding',
-      messenger: '',
+      messenger: '@' + name.toLowerCase().replace(/\s+/g, '_') + '_trading',
     },
     priceChecks: [],
     notes: `${name} demo account set for manager review.`,

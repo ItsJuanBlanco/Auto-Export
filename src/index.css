@@ -1836,3 +1836,10 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .today-banner-warning    { background: rgba(244,187,68,0.08);  border-color: var(--yellow); color: var(--text); }
 .today-banner-info-green { background: rgba(47,202,115,0.08);  border-color: var(--green);  color: var(--text); }
 .today-banner-info       { background: rgba(69,163,255,0.08);  border-color: var(--blue);   color: var(--text); }
+
+/* Contact card in client overview */
+.contact-card { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0; }
+.contact-name { font-size: 14px; font-weight: 600; margin-right: 4px; }
+.contact-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; background: var(--hover); font-size: 12px; color: var(--text); text-decoration: none; border: 1px solid var(--border); }
+.contact-chip:hover { border-color: var(--accent); color: var(--accent); }
+.contact-chip.muted { opacity: 0.6; }

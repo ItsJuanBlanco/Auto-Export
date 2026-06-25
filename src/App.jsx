@@ -1599,8 +1599,23 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
   const monthlyByAccount = buildMonthlyByAccount(client);
   const latestRegistry = { ...(dailyImport?.accounts || {}), ...(client?.accountRegistry || {}) };
 
+  const profile = client.profile || {};
+  const hasContact = profile.email || profile.phone || profile.messenger || profile.timezone || profile.propFirm;
+  const waLink = profile.phone ? `https://wa.me/${profile.phone.replace(/\D/g, '')}` : null;
+
   return (
     <div className="dashboard-stack">
+      {hasContact && (
+        <section className="contact-card">
+          {profile.fullName && <strong className="contact-name">{profile.fullName}</strong>}
+          {profile.email && <a href={`mailto:${profile.email}`} className="contact-chip"><span>✉</span>{profile.email}</a>}
+          {profile.phone && <a href={waLink || `tel:${profile.phone}`} target="_blank" rel="noreferrer" className="contact-chip"><span>{waLink ? '📱' : '📞'}</span>{profile.phone}</a>}
+          {profile.messenger && <span className="contact-chip"><span>💬</span>{profile.messenger}</span>}
+          {profile.timezone && <span className="contact-chip muted"><span>🕐</span>{profile.timezone}</span>}
+          {profile.propFirm && <span className="contact-chip muted"><span>🏢</span>{profile.propFirm}</span>}
+          {profile.stage && profile.stage !== 'Active' && <span className={`client-stage-badge stage-${profile.stage?.toLowerCase().replace(/\s+/g, '-')}`}>{profile.stage}</span>}
+        </section>
+      )}
       <div className="metric-grid">
         <div className="metric"><span>Latest daily PnL</span><strong className={overview.metrics.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(overview.metrics.dailyPnl)}</strong></div>
         <div className="metric"><span>Change vs prior close</span><strong className={overview.metrics.dailyDelta >= 0 ? 'positive' : 'negative'}>{formatCurrency(overview.metrics.dailyDelta)}</strong></div>
