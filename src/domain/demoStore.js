@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cam_crm_demo_state_v1';
-const DEMO_STATE_VERSION = 12;
+const DEMO_STATE_VERSION = 13;
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -189,7 +189,7 @@ export function createDemoState() {
       name: 'Rome',
       registry: {
         ROME5298: { accountName: 'ROME5298', alias: 'Live - 5298', connection: 'Live', accountType: 'Cash', status: 'Active', payoutState: 'Not requested', notes: 'Cash account: daily, weekly, balance only.', dateAdded: '2026-01-15' },
-        ROME7045: { accountName: 'ROME7045', alias: 'BlueSky - 7045', connection: 'BlueSky', accountType: 'Funded', status: 'Active', payoutState: 'Not requested', targetProfit: 52000, startBalance: 50000, maxDrawdownLimit: 2500, dateAdded: '2026-02-10', dateFunded: '2026-02-24', payoutCount: 2, dateLastPayout: '2026-05-12' },
+        ROME7045: { accountName: 'ROME7045', alias: 'BlueSky - 7045', connection: 'BlueSky', accountType: 'Funded', status: 'Active', payoutState: 'Not requested', targetProfit: 52000, startBalance: 50000, maxDrawdownLimit: 2500, dateAdded: '2026-02-10', dateFunded: '2026-02-24', payoutCount: 2, dateLastPayout: '2026-05-12', payoutHistory: [{ date: '2026-03-28', amount: 1800, note: 'First payout' }, { date: '2026-05-12', amount: 2100, note: 'Second payout' }] },
         ROME8801: { accountName: 'ROME8801', alias: 'Lucid - 8801', connection: 'Lucid', accountType: 'Evaluation - Standard', status: 'Active', payoutState: 'Not requested', targetProfit: 53000, startBalance: 50000, maxDrawdownLimit: 2000, dateAdded: '2026-05-20' },
         ROME9002: { accountName: 'ROME9002', alias: 'Tradovate - 9002', connection: 'Tradovate', accountType: 'Funded', status: 'Active', payoutState: 'Not requested', targetProfit: 52500, startBalance: 50000, maxDrawdownLimit: 4000, dateAdded: '2026-04-01', dateFunded: '2026-04-15' },
       },
@@ -224,7 +224,7 @@ export function createDemoState() {
       id: 'client-todd',
       name: 'Todd',
       registry: {
-        TODD5505: { accountName: 'TODD5505', alias: 'BlueSky - 5505', connection: 'BlueSky', accountType: 'Funded', status: 'Payout Hold', payoutState: 'Payout requested', targetProfit: 52000, startBalance: 50000, maxDrawdownLimit: 2500, dateAdded: '2026-03-05', dateFunded: '2026-03-18', payoutCount: 1, dateLastPayout: '2026-04-20' },
+        TODD5505: { accountName: 'TODD5505', alias: 'BlueSky - 5505', connection: 'BlueSky', accountType: 'Funded', status: 'Payout Hold', payoutState: 'Payout requested', targetProfit: 52000, startBalance: 50000, maxDrawdownLimit: 2500, dateAdded: '2026-03-05', dateFunded: '2026-03-18', payoutCount: 1, dateLastPayout: '2026-04-20', payoutHistory: [{ date: '2026-04-20', amount: 1600, note: 'First payout' }] },
         TODD7712: { accountName: 'TODD7712', alias: 'Apex - 7712', connection: 'Apex', accountType: 'Evaluation - Bullet Bot', status: 'Active', payoutState: 'Not requested', bulletBotPassType: '1 Day Pass', bulletBotDirection: 'Long', maxDrawdownLimit: 1000, dateAdded: '2026-06-20' },
         TODD7713: { accountName: 'TODD7713', alias: 'Apex - 7713', connection: 'Apex', accountType: 'Evaluation - Bullet Bot', status: 'Failed', payoutState: 'Not requested', bulletBotPassType: '3 Day Pass', bulletBotDirection: 'Short', maxDrawdownLimit: 1500, dateAdded: '2026-06-15', dateFailed: '2026-06-24' },
       },
@@ -260,7 +260,7 @@ export function createDemoState() {
       id: 'client-amanda',
       name: 'Amanda Capital',
       registry: {
-        AMAN1024: { accountName: 'AMAN1024', alias: 'MFF - 1024', connection: 'My Funded Futures', accountType: 'Funded', status: 'Active', payoutState: 'Clear to trade', targetProfit: 102000, startBalance: 100000, maxDrawdownLimit: 4000, dateAdded: '2026-01-08', dateFunded: '2026-01-22', payoutCount: 3, dateLastPayout: '2026-06-01' },
+        AMAN1024: { accountName: 'AMAN1024', alias: 'MFF - 1024', connection: 'My Funded Futures', accountType: 'Funded', status: 'Active', payoutState: 'Clear to trade', targetProfit: 102000, startBalance: 100000, maxDrawdownLimit: 4000, dateAdded: '2026-01-08', dateFunded: '2026-01-22', payoutCount: 3, dateLastPayout: '2026-06-01', payoutHistory: [{ date: '2026-03-10', amount: 2500, note: 'First payout' }, { date: '2026-04-22', amount: 3200, note: 'Second payout' }, { date: '2026-06-01', amount: 2800, note: 'Third payout' }] },
         AMAN2048: { accountName: 'AMAN2048', alias: 'Lucid - 2048', connection: 'Lucid', accountType: 'Evaluation - Standard', status: 'Reserve', payoutState: 'Not requested', maxDrawdownLimit: 2000, dateAdded: '2026-06-01' },
         AMAN9090: { accountName: 'AMAN9090', alias: 'Tradeify - 9090', connection: 'Tradeify', accountType: 'Unassigned', status: 'Active', payoutState: 'Not requested', dateAdded: '2026-06-22' },
       },
@@ -279,7 +279,7 @@ export function createDemoState() {
       id: 'client-blanco',
       name: 'Blanco Family',
       registry: {
-        BLAN3301: { accountName: 'BLAN3301', alias: 'Legends - 3301', connection: 'The Legends Trading', accountType: 'Funded', status: 'Active', payoutState: 'Not requested', targetProfit: 153000, startBalance: 150000, maxDrawdownLimit: 6000, dateAdded: '2026-01-05', dateFunded: '2026-01-20', payoutCount: 4, dateLastPayout: '2026-05-28' },
+        BLAN3301: { accountName: 'BLAN3301', alias: 'Legends - 3301', connection: 'The Legends Trading', accountType: 'Funded', status: 'Active', payoutState: 'Not requested', targetProfit: 153000, startBalance: 150000, maxDrawdownLimit: 6000, dateAdded: '2026-01-05', dateFunded: '2026-01-20', payoutCount: 4, dateLastPayout: '2026-05-28', payoutHistory: [{ date: '2026-02-15', amount: 3000, note: 'First payout' }, { date: '2026-03-22', amount: 3500, note: 'Second payout' }, { date: '2026-04-30', amount: 4000, note: 'Third payout' }, { date: '2026-05-28', amount: 4200, note: 'Fourth payout' }] },
         BLAN3302: { accountName: 'BLAN3302', alias: 'Legends - 3302', connection: 'The Legends Trading', accountType: 'Evaluation - Standard', status: 'Active', payoutState: 'Not requested', targetProfit: 103000, startBalance: 100000, maxDrawdownLimit: 3000, dateAdded: '2026-05-10' },
       },
       snapshots: [
@@ -318,7 +318,7 @@ export function createDemoState() {
       name: 'Sarah Training Pool',
       registry: {
         SARH4101: { accountName: 'SARH4101', alias: 'Apex - 4101', connection: 'Apex', accountType: 'Evaluation - Standard', status: 'Active', payoutState: 'Not requested', targetProfit: 53000, startBalance: 50000, maxDrawdownLimit: 2000, dateAdded: '2026-06-10' },
-        SARH4102: { accountName: 'SARH4102', alias: 'Lucid - 4102', connection: 'Lucid', accountType: 'Funded', status: 'Active', payoutState: 'Clear to trade', targetProfit: 52000, startBalance: 50000, maxDrawdownLimit: 2500, dateAdded: '2026-04-20', dateFunded: '2026-05-05', payoutCount: 1, dateLastPayout: '2026-06-05' },
+        SARH4102: { accountName: 'SARH4102', alias: 'Lucid - 4102', connection: 'Lucid', accountType: 'Funded', status: 'Active', payoutState: 'Clear to trade', targetProfit: 52000, startBalance: 50000, maxDrawdownLimit: 2500, dateAdded: '2026-04-20', dateFunded: '2026-05-05', payoutCount: 1, dateLastPayout: '2026-06-05', payoutHistory: [{ date: '2026-06-05', amount: 1500, note: 'First payout' }] },
         SARH4103: { accountName: 'SARH4103', alias: 'BlueSky - 4103', connection: 'BlueSky', accountType: 'Evaluation - Bullet Bot', status: 'Reserve', payoutState: 'Not requested', bulletBotPassType: '2 Day Pass', bulletBotDirection: '', maxDrawdownLimit: 1200, dateAdded: '2026-06-18' },
       },
       snapshots: [

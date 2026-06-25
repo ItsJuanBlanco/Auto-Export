@@ -1873,6 +1873,47 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
           {!overview.passProgress.length ? <p className="muted">No target-bearing accounts for this client.</p> : null}
         </div>
       </section>
+
+      {(() => {
+        const registry = client.accountRegistry || {};
+        const funded = Object.values(registry).filter(m => m.accountType === 'Funded' && (m.payoutHistory?.length > 0 || m.payoutCount > 0));
+        if (!funded.length) return null;
+        const grandTotal = funded.reduce((sum, m) => sum + (m.payoutHistory || []).reduce((s, p) => s + Number(p.amount || 0), 0), 0);
+        return (
+          <section className="panel">
+            <div className="panel-heading">
+              <h3>Payout History</h3>
+              {grandTotal > 0 && <span className="badge success">Total earned: {formatCurrency(grandTotal)}</span>}
+            </div>
+            <div className="payout-history-list">
+              {funded.map(m => {
+                const history = m.payoutHistory || [];
+                const accountTotal = history.reduce((s, p) => s + Number(p.amount || 0), 0);
+                return (
+                  <div key={m.accountName} className="payout-history-account">
+                    <div className="payout-account-header">
+                      <strong>{m.alias || m.accountName}</strong>
+                      {accountTotal > 0 && <span className="positive">{formatCurrency(accountTotal)} total</span>}
+                      {!history.length && m.payoutCount > 0 && <small className="muted">{m.payoutCount} payout{m.payoutCount !== 1 ? 's' : ''} — no detail recorded</small>}
+                    </div>
+                    {history.length > 0 && (
+                      <div className="payout-entries">
+                        {history.map((p, i) => (
+                          <div key={i} className="payout-entry">
+                            <span className="payout-date">{p.date}</span>
+                            <span className="positive payout-amount">{formatCurrency(p.amount)}</span>
+                            {p.note && <small className="muted">{p.note}</small>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })()}
     </div>
   );
 }

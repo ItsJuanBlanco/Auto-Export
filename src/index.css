@@ -1853,3 +1853,14 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .quick-log-panel select { flex-shrink: 0; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--hover); color: var(--text); font-size: 13px; }
 .quick-log-panel input { flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--hover); color: var(--text); font-size: 13px; }
 .quick-log-panel input:focus { outline: none; border-color: var(--accent); }
+
+/* Payout History section in ClientOverview */
+.payout-history-list { display: flex; flex-direction: column; gap: 12px; }
+.payout-history-account { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.payout-account-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 13px; }
+.payout-account-header strong { font-weight: 600; }
+.payout-entries { display: flex; flex-direction: column; gap: 4px; }
+.payout-entry { display: flex; align-items: center; gap: 12px; padding: 4px 6px; border-radius: 5px; font-size: 12px; }
+.payout-entry:hover { background: var(--hover); }
+.payout-date { color: var(--muted); min-width: 90px; }
+.payout-amount { font-weight: 600; min-width: 70px; }
