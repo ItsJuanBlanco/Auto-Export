@@ -615,10 +615,11 @@ function buildPnlVarianceAnalysis(client, allClients = []) {
 
   for (const di of recentImports) {
     for (const snap of di.snapshots || []) {
-      const meta = registry[snap.accountName] || {};
+      const acctKey = (snap.accountName || '').toLowerCase();
+      const meta = registry[acctKey] || Object.entries(registry).find(([k]) => k.toLowerCase() === acctKey)?.[1] || {};
       if (meta.accountType === 'Inactive / Ignore') continue;
-      if (!accountMap[snap.accountName]) {
-        accountMap[snap.accountName] = {
+      if (!accountMap[acctKey]) {
+        accountMap[acctKey] = {
           accountName: snap.accountName,
           alias: meta.alias || snap.accountName,
           accountType: meta.accountType || '',
@@ -628,7 +629,7 @@ function buildPnlVarianceAnalysis(client, allClients = []) {
           stratNames: new Set(),
         };
       }
-      const entry = accountMap[snap.accountName];
+      const entry = accountMap[acctKey];
       entry.totalActual += Number(snap.grossRealizedPnl || 0);
       entry.days += 1;
       for (const strat of snap.strategies || []) {
