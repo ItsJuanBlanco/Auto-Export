@@ -2379,7 +2379,7 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
   const latestRegistry = { ...(dailyImport?.accounts || {}), ...(client?.accountRegistry || {}) };
 
   const profile = client.profile || {};
-  const hasContact = profile.email || profile.phone || profile.messenger || profile.timezone || profile.propFirm;
+  const hasContact = profile.email || profile.phone || profile.messenger || profile.timezone || profile.propFirm || profile.preferredChannel || profile.country;
   const waLink = profile.phone ? `https://wa.me/${profile.phone.replace(/\D/g, '')}` : null;
 
   return (
@@ -2392,6 +2392,9 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
           {profile.messenger && <span className="contact-chip"><span>💬</span>{profile.messenger}</span>}
           {profile.timezone && <span className="contact-chip muted"><span>🕐</span>{profile.timezone}</span>}
           {profile.propFirm && <span className="contact-chip muted"><span>🏢</span>{profile.propFirm}</span>}
+          {profile.preferredChannel && <span className="contact-chip muted"><span>💬</span>{profile.preferredChannel}</span>}
+          {profile.country && <span className="contact-chip muted"><span>🌎</span>{profile.country}</span>}
+          {profile.language && <span className="contact-chip muted"><span>🌐</span>{{en:'English',es:'Español'}[profile.language]||profile.language}</span>}
           {profile.stage && profile.stage !== 'Active' && <span className={`client-stage-badge stage-${profile.stage?.toLowerCase().replace(/\s+/g, '-')}`}>{profile.stage}</span>}
         </section>
       )}
@@ -4010,6 +4013,24 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
               <option>Inactive</option>
             </select>
           </label>
+          <label>Preferred channel
+            <select value={profile.preferredChannel || ''} onChange={(e) => updateProfile({ preferredChannel: e.target.value })}>
+              <option value="">— Not set —</option>
+              <option>WhatsApp</option>
+              <option>Telegram</option>
+              <option>Email</option>
+              <option>Discord</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>Language
+            <select value={profile.language || ''} onChange={(e) => updateProfile({ language: e.target.value })}>
+              <option value="">— Not set —</option>
+              <option value="en">English</option>
+              <option value="es">Español</option>
+            </select>
+          </label>
+          <label>Country<input value={profile.country || ''} placeholder="e.g. Colombia, USA" onChange={(e) => updateProfile({ country: e.target.value })} /></label>
           <label>Start date<input type="date" value={profile.startDate || ''} onChange={(e) => updateProfile({ startDate: e.target.value })} /></label>
         </div>
       </section>
