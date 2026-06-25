@@ -390,6 +390,20 @@ export function addClient(state, name, camId = state.accountManager?.id) {
   };
 }
 
+export function removeClient(state, clientId) {
+  const remaining = (state.clients || []).filter(c => c.id !== clientId);
+  const newSelectedId = remaining[0]?.id || null;
+  return {
+    ...state,
+    clients: remaining,
+    camProfiles: (state.camProfiles || []).map(p => ({
+      ...p,
+      clientIds: (p.clientIds || []).filter(id => id !== clientId),
+    })),
+    selectedClientId: state.selectedClientId === clientId ? newSelectedId : state.selectedClientId,
+  };
+}
+
 export function addCamProfile(state, name) {
   const trimmed = String(name || '').trim();
   if (!trimmed) return state;

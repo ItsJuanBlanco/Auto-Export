@@ -29,6 +29,7 @@ import UploadArea from './components/UploadArea';
 import {
   addActivityEntry,
   addClient,
+  removeClient,
   addCamProfile,
   addTask,
   appendDailyImport,
@@ -3045,7 +3046,7 @@ function CopyButton({ value }) {
   );
 }
 
-function CredentialsTab({ client, onUpdateClient }) {
+function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
   const credentials = client.credentials || {};
   const profile = client.profile || {};
   const [showPasswords, setShowPasswords] = useState(false);
@@ -3106,6 +3107,19 @@ function CredentialsTab({ client, onUpdateClient }) {
           placeholder="Internal notes, special instructions, client preferences..."
           onChange={(e) => onUpdateClient({ notes: e.target.value })}
         />
+      </section>
+
+      <section className="panel" style={{borderColor:'var(--red)',opacity:0.8}}>
+        <div className="panel-heading"><h3>Danger zone</h3></div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0'}}>
+          <div>
+            <strong style={{fontSize:13}}>Remove client</strong>
+            <p className="muted" style={{fontSize:12,margin:'2px 0 0'}}>Permanently deletes all data for this client. Export a backup first.</p>
+          </div>
+          <button className="secondary-button" style={{color:'var(--red)',borderColor:'var(--red)',flexShrink:0}} onClick={onDeleteClient}>
+            <Trash2 size={13} /> Remove client
+          </button>
+        </div>
       </section>
     </div>
   );
@@ -3373,6 +3387,12 @@ export default function App() {
   function handleUpdateClient(patch) {
     if (!selectedClient) return;
     setState((current) => updateClientDetails(current, selectedClient.id, patch));
+  }
+
+  function handleDeleteClient() {
+    if (!selectedClient) return;
+    if (!window.confirm(`Remove "${selectedClient.name}" from this workspace? This cannot be undone. Export a backup first if you need the data.`)) return;
+    setState((current) => removeClient(current, selectedClient.id));
   }
 
   function handleResolveFlag(flagId) {
@@ -3749,7 +3769,7 @@ export default function App() {
               {effectiveActiveTab === 'Overview' ? <ClientOverview client={selectedClient} dailyImport={dailyImport} allClients={state.clients || []} onRequestMonthlyReport={(month) => setMonthlyReportMonth(month)} onLogPayout={handleLogPayout} /> : null}
               {effectiveActiveTab === 'Activity' ? <ActivityLog client={selectedClient} onAddEntry={handleAddActivity} onDeleteEntry={handleDeleteActivity} /> : null}
               {effectiveActiveTab === 'Tasks' ? <TasksTab client={selectedClient} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} /> : null}
-              {effectiveActiveTab === 'Credentials & Notes' ? <CredentialsTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
+              {effectiveActiveTab === 'Credentials & Notes' ? <CredentialsTab client={selectedClient} onUpdateClient={handleUpdateClient} onDeleteClient={handleDeleteClient} /> : null}
               {effectiveActiveTab === 'Price Checks' ? <PriceChecksTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
               {effectiveActiveTab === 'Stack Playbook' ? <StackPlaybook client={selectedClient} dailyImport={dailyImport} onUpdateAccount={handleAccountUpdate} allClients={state.clients || []} /> : null}
               {['Review', 'Evaluations', 'Funded', 'Cash'].includes(effectiveActiveTab) ? (
