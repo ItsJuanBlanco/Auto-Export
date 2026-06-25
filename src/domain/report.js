@@ -131,15 +131,6 @@ export function buildClientMessageReport(client, dailyImport) {
     lines.push('');
   }
 
-  const openFlags = (dailyImport?.flags || []).filter((f) => f.status !== 'Resolved');
-  if (openFlags.length) {
-    lines.push(`⚠️ *Notes:*`);
-    for (const f of openFlags.slice(0, 3)) {
-      lines.push(`  • ${f.message}`);
-    }
-    lines.push('');
-  }
-
   lines.push('_Any questions? Reply to this message._');
 
   return lines.join('\n');

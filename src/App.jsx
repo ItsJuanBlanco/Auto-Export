@@ -1481,8 +1481,7 @@ function ReportPanel({ client, dailyImport, onClose }) {
             <span>Daily close report · {report.date}</span>
           </div>
           <div className="report-header-right">
-            <strong className={report.counts.criticalFlags > 0 ? 'report-status-critical' : ''}>{report.status}</strong>
-            {report.counts.criticalFlags > 0 ? <span className="report-flag-badge">{report.counts.criticalFlags} critical</span> : null}
+            <strong>{report.status}</strong>
           </div>
         </header>
 
@@ -1511,12 +1510,6 @@ function ReportPanel({ client, dailyImport, onClose }) {
               </strong>
             </div>
           ) : null}
-          <div>
-            <span>Open flags</span>
-            <strong className={report.counts.openFlags > 0 ? 'report-negative' : ''}>
-              {report.counts.openFlags}
-            </strong>
-          </div>
         </section>
 
         {['evaluations', 'funded', 'cash'].map((group) => report.grouped[group].length ? (
@@ -1556,23 +1549,6 @@ function ReportPanel({ client, dailyImport, onClose }) {
           </section>
         ) : null)}
 
-        {report.openFlags.length > 0 ? (
-          <section className="report-section">
-            <h2>Open flags</h2>
-            <div className="report-flags">
-              {report.openFlags.map((flag) => (
-                <div key={flag.id} className={`report-flag-row report-flag-${flag.severity?.toLowerCase()}`}>
-                  <strong>{flag.severity} · {flag.type}</strong>
-                  <span>{flag.message}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : (
-          <section className="report-section">
-            <p className="report-ok">✓ No open flags for this close.</p>
-          </section>
-        )}
 
         <footer className="report-footer">
           <span>Generated {new Date(report.generatedAt).toLocaleString('en-US')}</span>
@@ -3360,7 +3336,7 @@ export default function App() {
               </button>
             );
           })()}
-          <button className={showSOP ? 'client-link active' : 'client-link'} onClick={() => { setShowSOP(true); setShowOverview(false); setShowSOP(false); }}>
+          <button className={showSOP ? 'client-link active' : 'client-link'} onClick={() => { setShowSOP(true); setShowOverview(false); }}>
             <CheckSquare size={16} />
             <span>Daily SOP</span>
             <em>Checklist</em>
