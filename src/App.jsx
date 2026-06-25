@@ -3309,11 +3309,28 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
         <div className="panel-heading"><h3>Client profile</h3><span className="badge muted">Contact information</span></div>
         <div className="form-grid">
           <label>Full name<input value={profile.fullName || ''} placeholder="Legal name" onChange={(e) => updateProfile({ fullName: e.target.value })} /></label>
-          <label>Email<input type="email" value={profile.email || ''} placeholder="client@email.com" onChange={(e) => updateProfile({ email: e.target.value })} /></label>
-          <label>Phone<input type="tel" value={profile.phone || ''} placeholder="+1 (555) 000-0000" onChange={(e) => updateProfile({ phone: e.target.value })} /></label>
+          <label>Email
+            <div className="input-copy-row">
+              <input type="email" value={profile.email || ''} placeholder="client@email.com" onChange={(e) => updateProfile({ email: e.target.value })} />
+              {profile.email && <a className="ghost-button icon-only" href={`mailto:${profile.email}`} title="Send email" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}>✉</a>}
+              <CopyButton value={profile.email} />
+            </div>
+          </label>
+          <label>Phone
+            <div className="input-copy-row">
+              <input type="tel" value={profile.phone || ''} placeholder="+1 (555) 000-0000" onChange={(e) => updateProfile({ phone: e.target.value })} />
+              {profile.phone && <a className="ghost-button icon-only" href={`tel:${profile.phone}`} title="Call" style={{display:'flex',alignItems:'center',padding:'0 6px',textDecoration:'none'}}>📞</a>}
+              <CopyButton value={profile.phone} />
+            </div>
+          </label>
           <label>Time zone<input value={profile.timezone || ''} placeholder="e.g. America/New_York" onChange={(e) => updateProfile({ timezone: e.target.value })} /></label>
           <label>Prop firm<input value={profile.propFirm || ''} placeholder="e.g. Apex, TopStep, FTMO" onChange={(e) => updateProfile({ propFirm: e.target.value })} /></label>
-          <label>Discord / Telegram<input value={profile.messenger || ''} placeholder="Handle or username" onChange={(e) => updateProfile({ messenger: e.target.value })} /></label>
+          <label>Discord / Telegram
+            <div className="input-copy-row">
+              <input value={profile.messenger || ''} placeholder="Handle or username" onChange={(e) => updateProfile({ messenger: e.target.value })} />
+              <CopyButton value={profile.messenger} />
+            </div>
+          </label>
           <label>Client stage
             <select value={profile.stage || 'Active'} onChange={(e) => updateProfile({ stage: e.target.value })}>
               <option>Onboarding</option>
