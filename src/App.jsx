@@ -1073,9 +1073,13 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
       <section className="content">
         <div className="page-header">
           <div>
-            <span className="eyebrow">Manager overview · {session?.displayName || 'Manager'}</span>
+            <span className="eyebrow">Vincere Trading · {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
             <h1>Operations Command Center</h1>
-            <p>Team-level analytics: accounts, strategy performance, lifecycle and flags.</p>
+            <div className="occ-status-row">
+              <span className="occ-live-dot" />
+              <span>{cams.length} CAMs active · {totals.clients} clients · {totals.accounts} accounts tracked</span>
+              {totals.flags > 0 && <span className="negative">· {totals.flags} open flag{totals.flags !== 1 ? 's' : ''}</span>}
+            </div>
           </div>
           <div className="header-actions">
             <button className="secondary-button" onClick={onLoadDemo}><Download size={16} /> Reload Demo</button>
