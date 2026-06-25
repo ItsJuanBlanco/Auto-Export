@@ -2099,3 +2099,4 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .batch-drop-zone span { font-size: 14px; font-weight: 600; }
 .kind-account { background: rgba(16,185,129,0.15); color: var(--green); }
 .kind-client { background: rgba(99,102,241,0.15); color: var(--accent); }
+.global-search-result.global-search-active { background: var(--hover); outline: 1px solid var(--accent); }

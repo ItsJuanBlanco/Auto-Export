@@ -4265,6 +4265,7 @@ export default function App() {
   const [strategySetIndex, setStrategySetIndex] = useState({ status: 'Not loaded', records: [] });
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchIdx, setGlobalSearchIdx] = useState(0);
 
   useEffect(() => {
     function onKey(e) {
@@ -5023,14 +5024,25 @@ export default function App() {
           <div className="global-search-modal">
             <div className="global-search-bar">
               <span className="global-search-icon">⌕</span>
-              <input autoFocus value={globalSearchQuery} onChange={e => setGlobalSearchQuery(e.target.value)} placeholder="Search all clients — activity, tasks, notes…" className="global-search-input" />
+              <input autoFocus value={globalSearchQuery} onChange={e => { setGlobalSearchQuery(e.target.value); setGlobalSearchIdx(0); }} placeholder="Search all clients — activity, tasks, notes…" className="global-search-input" onKeyDown={e => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setGlobalSearchIdx(i => Math.min(i + 1, results.length - 1)); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setGlobalSearchIdx(i => Math.max(i - 1, 0)); }
+                else if (e.key === 'Enter' && results[globalSearchIdx]) {
+                  e.preventDefault();
+                  const r = results[globalSearchIdx];
+                  setGlobalSearchOpen(false);
+                  const ownerCam = (state.camProfiles || []).find(p => (p.clientIds || []).includes(r.client.id));
+                  setState(s => { const withCam = ownerCam ? selectCam(s, ownerCam.id) : s; return selectClient(withCam, r.client.id); });
+                  setPlatformView('cam'); setShowOverview(false); setShowSOP(false); setActiveTab(r.tab);
+                }
+              }} />
               <kbd className="global-search-esc" onClick={() => setGlobalSearchOpen(false)}>esc</kbd>
             </div>
             <div className="global-search-results">
               {!q && <div className="global-search-hint muted">Type to search across all clients</div>}
               {q && !results.length && <div className="global-search-hint muted">No results for "{globalSearchQuery}"</div>}
               {results.map((r, i) => (
-                <button key={i} className="global-search-result" onClick={() => {
+                <button key={i} className={`global-search-result${i === globalSearchIdx ? ' global-search-active' : ''}`} onClick={() => {
                   setGlobalSearchOpen(false);
                   const ownerCam = (state.camProfiles || []).find(p => (p.clientIds || []).includes(r.client.id));
                   setState(s => {
