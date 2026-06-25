@@ -1054,11 +1054,11 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           <small className="sidebar-role-sub">{session?.displayName || session?.username || 'Manager'}</small>
         </div>
         <button className="client-link active"><Users size={16} /><span>Operations</span><em>Live</em></button>
-        {(camProfiles.length ? camProfiles : cams).map((cam) => (
+        {cams.map((cam) => (
           <button className="client-link" key={cam.id} onClick={() => onOpenCam(cam.id)}>
             <BarChart3 size={16} />
             <span>{cam.name}</span>
-            <em>{cam.status || 'Active'}</em>
+            <em className={cam.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(cam.dailyPnl)}</em>
           </button>
         ))}
         <div className="manager-sidebar-footer">
@@ -1089,7 +1089,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             }} title="Copy team daily report for WhatsApp/Telegram">
               <Copy size={16} />{teamCopyDone ? ' Copied!' : ' Copy Team Report'}
             </button>
-            <button className="primary-button" onClick={() => onOpenCam('am-pedro')}><BarChart3 size={16} /> Open Pedro Workspace</button>
+            <button className="primary-button" onClick={() => onOpenCam(cams[0]?.id || 'am-pedro')}><BarChart3 size={16} /> Open {cams[0]?.name || 'Pedro'}'s Workspace</button>
           </div>
         </div>
 
