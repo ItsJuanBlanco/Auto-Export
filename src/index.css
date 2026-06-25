@@ -1873,3 +1873,10 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .sop-section-active > .sop-section-header { color: var(--accent); }
 .sop-section-emoji { font-size: 15px; margin-right: 4px; }
 .sop-section-badge { margin-left: auto; padding: 1px 8px; border-radius: 10px; background: rgba(47,202,115,0.15); color: var(--green); font-size: 11px; font-weight: 600; border: 1px solid rgba(47,202,115,0.25); }
+
+/* Payout log inline form */
+.payout-log-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 6px; margin: 4px 0; background: var(--hover); border-radius: 6px; }
+.payout-log-form input { padding: 5px 9px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; }
+.payout-log-form input[type="number"] { width: 110px; }
+.payout-log-form input[type="date"] { width: 130px; }
+.payout-log-form input[placeholder="Note (optional)"] { flex: 1; min-width: 120px; }

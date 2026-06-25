@@ -1592,7 +1592,73 @@ function ClientPnlChart({ history = [] }) {
   );
 }
 
-function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthlyReport }) {
+function PayoutHistoryPanel({ funded, grandTotal, onLogPayout }) {
+  const today = todayIsoDate();
+  const [logAccountName, setLogAccountName] = useState(null);
+  const [logAmount, setLogAmount] = useState('');
+  const [logDate, setLogDate] = useState(today);
+  const [logNote, setLogNote] = useState('');
+
+  function submitPayout(accountName) {
+    const amount = Number(logAmount);
+    if (!amount || amount <= 0) return;
+    onLogPayout?.(accountName, { date: logDate, amount, note: logNote.trim() });
+    setLogAccountName(null);
+    setLogAmount('');
+    setLogDate(today);
+    setLogNote('');
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <h3>Payout History</h3>
+        {grandTotal > 0 && <span className="badge success">Total earned: {formatCurrency(grandTotal)}</span>}
+      </div>
+      <div className="payout-history-list">
+        {funded.map(m => {
+          const history = m.payoutHistory || [];
+          const accountTotal = history.reduce((s, p) => s + Number(p.amount || 0), 0);
+          const isLogging = logAccountName === m.accountName;
+          return (
+            <div key={m.accountName} className="payout-history-account">
+              <div className="payout-account-header">
+                <strong>{m.alias || m.accountName}</strong>
+                {accountTotal > 0 && <span className="positive">{formatCurrency(accountTotal)} total · {history.length} payout{history.length !== 1 ? 's' : ''}</span>}
+                {!history.length && m.payoutCount > 0 && <small className="muted">{m.payoutCount} payout{m.payoutCount !== 1 ? 's' : ''} — no detail</small>}
+                {!history.length && !m.payoutCount && <small className="muted">No payouts yet</small>}
+                <button className="ghost-button" style={{marginLeft:'auto',fontSize:12}} onClick={() => setLogAccountName(isLogging ? null : m.accountName)}>
+                  {isLogging ? 'Cancel' : '+ Log payout'}
+                </button>
+              </div>
+              {isLogging && (
+                <div className="payout-log-form">
+                  <input type="number" placeholder="Amount (e.g. 2500)" value={logAmount} onChange={e => setLogAmount(e.target.value)} min="1" />
+                  <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} />
+                  <input placeholder="Note (optional)" value={logNote} onChange={e => setLogNote(e.target.value)} />
+                  <button className="primary-button" onClick={() => submitPayout(m.accountName)}>Save</button>
+                </div>
+              )}
+              {history.length > 0 && (
+                <div className="payout-entries">
+                  {history.map((p, i) => (
+                    <div key={i} className="payout-entry">
+                      <span className="payout-date">{p.date}</span>
+                      <span className="positive payout-amount">{formatCurrency(p.amount)}</span>
+                      {p.note && <small className="muted">{p.note}</small>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthlyReport, onLogPayout }) {
   const [monthlyExpanded, setMonthlyExpanded] = useState('');
   const overview = buildClientOverview(client, dailyImport);
   const maxDistribution = Math.max(...overview.distribution.map((item) => item.count), 1);
@@ -1852,42 +1918,15 @@ function ClientOverview({ client, dailyImport, allClients = [], onRequestMonthly
 
       {(() => {
         const registry = client.accountRegistry || {};
-        const funded = Object.values(registry).filter(m => m.accountType === 'Funded' && (m.payoutHistory?.length > 0 || m.payoutCount > 0));
+        const funded = Object.values(registry).filter(m => m.accountType === 'Funded');
         if (!funded.length) return null;
         const grandTotal = funded.reduce((sum, m) => sum + (m.payoutHistory || []).reduce((s, p) => s + Number(p.amount || 0), 0), 0);
         return (
-          <section className="panel">
-            <div className="panel-heading">
-              <h3>Payout History</h3>
-              {grandTotal > 0 && <span className="badge success">Total earned: {formatCurrency(grandTotal)}</span>}
-            </div>
-            <div className="payout-history-list">
-              {funded.map(m => {
-                const history = m.payoutHistory || [];
-                const accountTotal = history.reduce((s, p) => s + Number(p.amount || 0), 0);
-                return (
-                  <div key={m.accountName} className="payout-history-account">
-                    <div className="payout-account-header">
-                      <strong>{m.alias || m.accountName}</strong>
-                      {accountTotal > 0 && <span className="positive">{formatCurrency(accountTotal)} total</span>}
-                      {!history.length && m.payoutCount > 0 && <small className="muted">{m.payoutCount} payout{m.payoutCount !== 1 ? 's' : ''} — no detail recorded</small>}
-                    </div>
-                    {history.length > 0 && (
-                      <div className="payout-entries">
-                        {history.map((p, i) => (
-                          <div key={i} className="payout-entry">
-                            <span className="payout-date">{p.date}</span>
-                            <span className="positive payout-amount">{formatCurrency(p.amount)}</span>
-                            {p.note && <small className="muted">{p.note}</small>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+          <PayoutHistoryPanel
+            funded={funded}
+            grandTotal={grandTotal}
+            onLogPayout={onLogPayout}
+          />
         );
       })()}
     </div>
@@ -3194,6 +3233,21 @@ export default function App() {
     setState((current) => upsertAccountMeta(current, selectedClient.id, accountName, patch));
   }
 
+  function handleLogPayout(accountName, entry) {
+    if (!selectedClient) return;
+    setState((current) => {
+      const clientData = (current.clients || []).find(c => c.id === selectedClient.id);
+      const existing = clientData?.accountRegistry?.[accountName]?.payoutHistory || [];
+      const newHistory = [...existing, entry];
+      const prevCount = Number(clientData?.accountRegistry?.[accountName]?.payoutCount || 0);
+      return upsertAccountMeta(current, selectedClient.id, accountName, {
+        payoutHistory: newHistory,
+        payoutCount: prevCount + 1,
+        dateLastPayout: entry.date,
+      });
+    });
+  }
+
   function handleUpdateClient(patch) {
     if (!selectedClient) return;
     setState((current) => updateClientDetails(current, selectedClient.id, patch));
@@ -3561,7 +3615,7 @@ export default function App() {
                 ))}
               </div>
 
-              {effectiveActiveTab === 'Overview' ? <ClientOverview client={selectedClient} dailyImport={dailyImport} allClients={state.clients || []} onRequestMonthlyReport={(month) => setMonthlyReportMonth(month)} /> : null}
+              {effectiveActiveTab === 'Overview' ? <ClientOverview client={selectedClient} dailyImport={dailyImport} allClients={state.clients || []} onRequestMonthlyReport={(month) => setMonthlyReportMonth(month)} onLogPayout={handleLogPayout} /> : null}
               {effectiveActiveTab === 'Activity' ? <ActivityLog client={selectedClient} onAddEntry={handleAddActivity} onDeleteEntry={handleDeleteActivity} /> : null}
               {effectiveActiveTab === 'Tasks' ? <TasksTab client={selectedClient} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} /> : null}
               {effectiveActiveTab === 'Credentials & Notes' ? <CredentialsTab client={selectedClient} onUpdateClient={handleUpdateClient} /> : null}
