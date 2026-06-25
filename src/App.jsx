@@ -3280,6 +3280,25 @@ export default function App() {
   useEffect(() => saveUsers(users), [users]);
 
   useEffect(() => {
+    function onKey(e) {
+      // Ignore when typing in an input/textarea/select
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (e.altKey && e.key === 'l') { e.preventDefault(); setShowQuickLog(v => !v); }
+      if (e.altKey && e.key === 'u') { e.preventDefault(); setShowUpload(v => !v); }
+      if (e.altKey && e.key === 'o') { e.preventDefault(); setShowOverview(true); setShowSOP(false); }
+      if (e.altKey && e.key === 's') { e.preventDefault(); setShowSOP(true); setShowOverview(false); }
+      if (e.altKey && e.key === 'n') {
+        e.preventDefault();
+        setActiveTab('Tasks');
+        setShowOverview(false); setShowSOP(false);
+        setTimeout(() => document.querySelector('.task-text-input')?.focus(), 100);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     fetch('/strategy-set-index.json', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
@@ -3696,8 +3715,8 @@ export default function App() {
                       setSelectedDate(d.toISOString().slice(0, 10));
                     }}><ChevronRight size={15} /></button>
                   </div>
-                  <button className="ghost-button" disabled={!selectedClient} onClick={() => setShowQuickLog(v => !v)} title="Quickly log a call, note, or action"><Plus size={16} /> Quick Log</button>
-                  <button className="secondary-button" onClick={() => setShowUpload((value) => !value)}><Upload size={16} /> Upload Daily Files</button>
+                  <button className="ghost-button" disabled={!selectedClient} onClick={() => setShowQuickLog(v => !v)} title="Quick Log (Alt+L)"><Plus size={16} /> Quick Log</button>
+                  <button className="secondary-button" onClick={() => setShowUpload((value) => !value)} title="Upload NT CSV files (Alt+U)"><Upload size={16} /> Upload Daily Files</button>
                   <button className="ghost-button" disabled={!dailyImport} onClick={copyClientReport} title="Copy pre-formatted daily update for WhatsApp/Telegram">
                     <Copy size={16} />{copyDone ? ' Copied!' : ' Copy Update'}
                   </button>
