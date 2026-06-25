@@ -4509,8 +4509,9 @@ export default function App() {
     if (!window.confirm(`Import "${file.name}"? This will replace all current data.`)) return;
     try {
       const text = await file.text();
+      const raw = JSON.parse(text);
+      if (raw._sopStreak) { try { localStorage.setItem('cam-sop-streak', JSON.stringify(raw._sopStreak)); } catch {} }
       const imported = parseImportedState(text);
-      if (imported._sopStreak) { try { localStorage.setItem('cam-sop-streak', JSON.stringify(imported._sopStreak)); } catch {} }
       setState(imported);
       setShowOverview(false); setShowSOP(false);
     } catch (err) {
