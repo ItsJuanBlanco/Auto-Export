@@ -724,8 +724,11 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   return (
     <main className="manager-shell">
       <aside className="manager-sidebar">
-        <span className="eyebrow">Platform</span>
-        <strong>Vincere CRM</strong>
+        <div className="manager-sidebar-header">
+          <span className="sidebar-role-badge manager-badge">Manager</span>
+          <strong>Vincere CRM</strong>
+          <small className="sidebar-role-sub">{session?.displayName || session?.username || 'Manager'}</small>
+        </div>
         <button className="client-link active"><Users size={16} /><span>Operations</span><em>Live</em></button>
         {(camProfiles.length ? camProfiles : cams).map((cam) => (
           <button className="client-link" key={cam.id} onClick={() => onOpenCam(cam.id)}>
@@ -1408,21 +1411,28 @@ function buildPnlCalendar(client) {
     const pnl = (di.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0);
     byDate[di.date] = { date: di.date, pnl, status: di.status };
   }
-  // Build a 10-week window ending today
+  // Build a 12-week window of Mon-Fri only (no weekends)
   const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - 69); // 70 days = 10 weeks
+  const cur = new Date(end);
+  // Rewind to most recent Friday or today
+  while (cur.getDay() === 0 || cur.getDay() === 6) cur.setDate(cur.getDate() - 1);
+  // Rewind 12 weeks of Mon-Fri
+  const start = new Date(cur);
+  start.setDate(start.getDate() - 83); // ~12 weeks back
+  // Align start to Monday
+  while (start.getDay() !== 1) start.setDate(start.getDate() - 1);
+
   const weeks = [];
   let week = [];
-  const cur = new Date(start);
-  // Align to Monday
-  const dow = cur.getDay();
-  cur.setDate(cur.getDate() - (dow === 0 ? 6 : dow - 1));
-  while (cur <= end) {
-    const iso = cur.toISOString().slice(0, 10);
-    week.push({ date: iso, ...(byDate[iso] || { date: iso, pnl: null, status: null }) });
-    if (week.length === 7) { weeks.push(week); week = []; }
-    cur.setDate(cur.getDate() + 1);
+  const iter = new Date(start);
+  while (iter <= end) {
+    const dow = iter.getDay();
+    if (dow >= 1 && dow <= 5) { // Mon–Fri only
+      const iso = iter.toISOString().slice(0, 10);
+      week.push({ date: iso, ...(byDate[iso] || { date: iso, pnl: null, status: null }) });
+      if (week.length === 5) { weeks.push(week); week = []; }
+    }
+    iter.setDate(iter.getDate() + 1);
   }
   if (week.length) weeks.push(week);
   return weeks;
@@ -1431,14 +1441,14 @@ function buildPnlCalendar(client) {
 function PnlCalendarHeatmap({ client }) {
   const weeks = buildPnlCalendar(client);
   if (!weeks.length) return null;
-  const allPnls = weeks.flat().map((d) => d.pnl).filter((v) => v !== null);
+  const allPnls = weeks.flat().map((d) => d.pnl).filter((v) => v !== null && v !== 0);
   const maxAbs = Math.max(...allPnls.map(Math.abs), 1);
-  const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
   function cellColor(day) {
     if (day.pnl === null) return 'var(--surface-3)';
     if (day.pnl === 0) return 'var(--surface-2)';
-    const intensity = Math.min(0.9, 0.2 + (Math.abs(day.pnl) / maxAbs) * 0.7);
+    const intensity = Math.min(0.92, 0.25 + (Math.abs(day.pnl) / maxAbs) * 0.67);
     return day.pnl > 0
       ? `rgba(47, 202, 115, ${intensity})`
       : `rgba(255, 90, 105, ${intensity})`;
@@ -1447,7 +1457,7 @@ function PnlCalendarHeatmap({ client }) {
   return (
     <div className="pnl-heatmap">
       <div className="pnl-heatmap-day-labels">
-        {DAY_LABELS.map((l, i) => <span key={i}>{l}</span>)}
+        {DAY_LABELS.map((l) => <span key={l}>{l}</span>)}
       </div>
       <div className="pnl-heatmap-grid">
         {weeks.map((week, wi) => (
@@ -1457,22 +1467,23 @@ function PnlCalendarHeatmap({ client }) {
                 key={day.date}
                 className="pnl-heatmap-cell"
                 style={{ background: cellColor(day) }}
-                title={day.pnl !== null ? `${day.date}: ${day.pnl >= 0 ? '+' : ''}${formatCurrency(day.pnl)}` : day.date}
+                title={day.pnl !== null ? `${day.date}: ${day.pnl >= 0 ? '+' : ''}${formatCurrency(day.pnl)}` : `${day.date} — no close`}
               />
             ))}
           </div>
         ))}
       </div>
       <div className="pnl-heatmap-legend">
-        <span className="negative">Negative</span>
+        <span className="negative">Loss</span>
         <div className="heatmap-legend-bar">
-          <i style={{ background: 'rgba(255,90,105,0.8)' }} />
-          <i style={{ background: 'rgba(255,90,105,0.4)' }} />
+          <i style={{ background: 'rgba(255,90,105,0.85)' }} />
+          <i style={{ background: 'rgba(255,90,105,0.45)' }} />
           <i style={{ background: 'var(--surface-3)' }} />
-          <i style={{ background: 'rgba(47,202,115,0.4)' }} />
-          <i style={{ background: 'rgba(47,202,115,0.8)' }} />
+          <i style={{ background: 'rgba(47,202,115,0.45)' }} />
+          <i style={{ background: 'rgba(47,202,115,0.85)' }} />
         </div>
-        <span className="positive">Positive</span>
+        <span className="positive">Profit</span>
+        <span className="muted" style={{marginLeft:'8px'}}>Mon–Fri only</span>
       </div>
     </div>
   );
@@ -2455,8 +2466,12 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <span>Account Manager</span>
+          <div className="sidebar-role-row">
+            <span className="sidebar-role-badge cam-badge">CAM</span>
+            <button className="sidebar-logout-btn" onClick={() => setSession(null)} title="Sign out"><LogOut size={14} /></button>
+          </div>
           <strong>{currentCamProfile?.name || state.accountManager.name}</strong>
+          <small className="sidebar-role-sub">{session?.displayName || session?.username || ''} · {session?.role || 'CAM'}</small>
           <div className="backup-actions">
             <button className="ghost-button" onClick={() => setPlatformView('manager')}><Users size={14} /> Team</button>
             <button className="ghost-button" onClick={handleExport}><Download size={14} /> Export</button>
@@ -2464,7 +2479,6 @@ export default function App() {
               <Upload size={14} /> Import
               <input type="file" accept=".json,application/json" hidden onChange={handleImport} />
             </label>
-            <button className="ghost-button" onClick={() => setSession(null)}><LogOut size={14} /> Out</button>
           </div>
         </div>
         <form className="client-form" onSubmit={handleAddClient}>
