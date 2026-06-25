@@ -690,7 +690,7 @@ function buildConsistencyWarnings(client) {
   for (const meta of funded) {
     const pnlByDay = [];
     for (const di of client.dailyImports || []) {
-      const snap = (di.snapshots || []).find((s) => s.accountName === meta.accountName);
+      const snap = (di.snapshots || []).find((s) => s.accountName?.toLowerCase() === meta.accountName?.toLowerCase());
       if (snap) pnlByDay.push({ date: di.date, pnl: Number(snap.grossRealizedPnl || 0) });
     }
     if (pnlByDay.length < 3) continue;
@@ -744,7 +744,7 @@ function buildDisconnectAlerts(client) {
 
     const priorPnls = (client.dailyImports.slice(-6, -1) || [])
       .map((di) => {
-        const s = (di.snapshots || []).find((x) => x.accountName === snapshot.accountName);
+        const s = (di.snapshots || []).find((x) => x.accountName?.toLowerCase() === snapshot.accountName?.toLowerCase());
         return s ? Number(s.grossRealizedPnl || 0) : null;
       })
       .filter((v) => v !== null && v !== 0);
@@ -849,7 +849,7 @@ function buildPayoutPipeline(clients = [], camProfiles = []) {
     for (const meta of Object.values(client.accountRegistry || {})) {
       if (!meta.payoutState || meta.payoutState === 'Not requested') continue;
       const latest = client.dailyImports?.at(-1);
-      const snapshot = (latest?.snapshots || []).find((s) => s.accountName === meta.accountName);
+      const snapshot = (latest?.snapshots || []).find((s) => s.accountName?.toLowerCase() === meta.accountName?.toLowerCase());
       rows.push({
         clientName: client.name,
         clientId: client.id,
@@ -3026,7 +3026,7 @@ function buildPortfolioInsights(clients, allClients = []) {
       const last7 = imports.slice(-7);
       if (last7.length < 3) continue;
       const buffers = last7.map((di) => {
-        const s = (di.snapshots || []).find((x) => x.accountName === snap.accountName);
+        const s = (di.snapshots || []).find((x) => x.accountName?.toLowerCase() === snap.accountName?.toLowerCase());
         return s ? remainingBuffer(s, meta) : null;
       }).filter((v) => v !== null);
 
@@ -3091,7 +3091,7 @@ function buildPortfolioInsights(clients, allClients = []) {
         const recentImports = imports.slice(-10);
         if (recentImports.length < 6) continue;
         const pnls = recentImports.map(di => {
-          const s = (di.snapshots || []).find(x => x.accountName === snap.accountName);
+          const s = (di.snapshots || []).find(x => x.accountName?.toLowerCase() === snap.accountName?.toLowerCase());
           return s ? Number(s.grossRealizedPnl || 0) : null;
         }).filter(v => v !== null);
         if (pnls.length < 6) continue;
@@ -3222,7 +3222,7 @@ function buildIncomeProjection(clients = []) {
       // velocity from last 7 imports
       const recent = (client.dailyImports || []).slice(-7);
       const pnlHistory = recent.map((di) => {
-        const s = (di.snapshots || []).find((x) => x.accountName === snap.accountName);
+        const s = (di.snapshots || []).find((x) => x.accountName?.toLowerCase() === snap.accountName?.toLowerCase());
         return s ? Number(s.grossRealizedPnl || 0) : 0;
       }).filter((v) => v !== 0);
       const avgDaily = pnlHistory.length ? pnlHistory.reduce((s, v) => s + v, 0) / pnlHistory.length : 0;
