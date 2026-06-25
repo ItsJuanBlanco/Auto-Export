@@ -699,6 +699,12 @@ function buildDisconnectAlerts(client) {
   const alerts = [];
   const latest = client.dailyImports?.at(-1);
   if (!latest) return alerts;
+  // Only relevant if the latest close is recent (today or prev trading day)
+  const today = todayIsoDate();
+  const prevTrading = new Date();
+  do { prevTrading.setDate(prevTrading.getDate() - 1); } while ([0, 6].includes(prevTrading.getDay()));
+  const prevTradingStr = prevTrading.toISOString().slice(0, 10);
+  if (latest.date !== today && latest.date !== prevTradingStr) return alerts;
   const registry = { ...(latest.accounts || {}), ...(client.accountRegistry || {}) };
 
   for (const snapshot of latest.snapshots || []) {
