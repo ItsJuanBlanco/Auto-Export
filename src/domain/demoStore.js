@@ -601,8 +601,10 @@ export function parseImportedState(text) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.clients) || !data.accountManager) {
     throw new Error('File is not a valid CAM backup.');
   }
+  // eslint-disable-next-line no-unused-vars
+  const { _sopStreak, ...rest } = data;
   return {
-    ...data,
+    ...rest,
     accountManager: data.accountManager,
     demoVersion: data.demoVersion || 0,
     camProfiles: data.camProfiles || [],
