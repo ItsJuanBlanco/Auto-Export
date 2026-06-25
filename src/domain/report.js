@@ -1,3 +1,60 @@
+export function buildWeeklyMessageReport(client) {
+  if (!client) return '';
+  const imports = (client.dailyImports || []);
+  if (!imports.length) return '';
+
+  // Last 5 trade days (Mon-Fri, ignoring no-close days)
+  const recent = imports.slice(-7).filter((di) => di.status === 'Closed' || di.snapshots?.length > 0);
+  if (!recent.length) return '';
+
+  const sign = (n) => (n >= 0 ? '+' : '');
+  const fmt = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(n || 0));
+
+  const registry = client.accountRegistry || {};
+  const dailyTotals = recent.map((di) => {
+    const pnl = (di.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0);
+    return { date: di.date, pnl };
+  });
+
+  const weekPnl = dailyTotals.reduce((s, d) => s + d.pnl, 0);
+  const bestDay = dailyTotals.reduce((best, d) => d.pnl > best.pnl ? d : best, dailyTotals[0]);
+  const worstDay = dailyTotals.reduce((worst, d) => d.pnl < worst.pnl ? d : worst, dailyTotals[0]);
+  const positiveDays = dailyTotals.filter((d) => d.pnl > 0).length;
+
+  const latestImport = recent.at(-1);
+  const fundedSnaps = (latestImport?.snapshots || []).filter((s) => registry[s.accountName]?.accountType === 'Funded');
+
+  const weekStart = recent[0]?.date;
+  const weekEnd = recent.at(-1)?.date;
+
+  const lines = [];
+  lines.push(`📊 *Weekly Summary — ${weekStart} → ${weekEnd}*`);
+  lines.push(`👤 ${client?.name || 'Client'}`);
+  lines.push('');
+  lines.push(`💰 *Net P&L:* ${sign(weekPnl)}${fmt(weekPnl)}`);
+  lines.push(`📅 *Trading days:* ${recent.length} | ✅ Positive: ${positiveDays}`);
+  lines.push(`📈 *Best day:* ${sign(bestDay.pnl)}${fmt(bestDay.pnl)} (${bestDay.date})`);
+  if (worstDay.date !== bestDay.date) {
+    lines.push(`📉 *Worst day:* ${sign(worstDay.pnl)}${fmt(worstDay.pnl)} (${worstDay.date})`);
+  }
+  lines.push('');
+
+  if (fundedSnaps.length) {
+    lines.push(`✅ *Funded Accounts (${fundedSnaps.length}):*`);
+    for (const s of fundedSnaps) {
+      const meta = registry[s.accountName] || {};
+      const alias = meta.alias || s.accountName;
+      const strats = (s.strategies || []).filter((st) => st.enabled).map((st) => st.strategyFamily || st.strategyName).join(', ');
+      const dd = Number(s.trailingMaxDrawdown || 0);
+      lines.push(`  • ${alias}${strats ? ` [${strats}]` : ''}${dd > 0 ? ` — Buffer: ${fmt(dd)}` : ''}`);
+    }
+    lines.push('');
+  }
+
+  lines.push(`_Great week! Any questions, reply here._`);
+  return lines.join('\n');
+}
+
 export function formatCurrency(value) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

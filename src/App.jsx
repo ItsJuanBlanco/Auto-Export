@@ -50,7 +50,7 @@ import {
 } from './domain/demoStore';
 import { buildCamOverview } from './domain/camOverview';
 import { recalculateDailyImport, reconcileDailyImport } from './domain/reconcile';
-import { buildClientMessageReport, buildDailyReportSummary, formatCurrency } from './domain/report';
+import { buildClientMessageReport, buildWeeklyMessageReport, buildDailyReportSummary, formatCurrency } from './domain/report';
 import {
   USER_ROLES,
   addUser,
@@ -2272,6 +2272,16 @@ function CredentialsTab({ client, onUpdateClient }) {
           <label>Time zone<input value={profile.timezone || ''} placeholder="e.g. America/New_York" onChange={(e) => updateProfile({ timezone: e.target.value })} /></label>
           <label>Prop firm<input value={profile.propFirm || ''} placeholder="e.g. Apex, TopStep, FTMO" onChange={(e) => updateProfile({ propFirm: e.target.value })} /></label>
           <label>Discord / Telegram<input value={profile.messenger || ''} placeholder="Handle or username" onChange={(e) => updateProfile({ messenger: e.target.value })} /></label>
+          <label>Client stage
+            <select value={profile.stage || 'Active'} onChange={(e) => updateProfile({ stage: e.target.value })}>
+              <option>Onboarding</option>
+              <option>Active</option>
+              <option>At Risk</option>
+              <option>Paused</option>
+              <option>Inactive</option>
+            </select>
+          </label>
+          <label>Start date<input type="date" value={profile.startDate || ''} onChange={(e) => updateProfile({ startDate: e.target.value })} /></label>
         </div>
       </section>
 
@@ -2572,6 +2582,7 @@ export default function App() {
   }
 
   const [copyDone, setCopyDone] = useState(false);
+  const [copyWeekDone, setCopyWeekDone] = useState(false);
 
   function copyClientReport() {
     if (!selectedClient || !dailyImport) return;
@@ -2579,6 +2590,16 @@ export default function App() {
     navigator.clipboard.writeText(text).then(() => {
       setCopyDone(true);
       setTimeout(() => setCopyDone(false), 2000);
+    });
+  }
+
+  function copyWeeklyReport() {
+    if (!selectedClient) return;
+    const text = buildWeeklyMessageReport(selectedClient);
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyWeekDone(true);
+      setTimeout(() => setCopyWeekDone(false), 2000);
     });
   }
 
@@ -2752,14 +2773,22 @@ export default function App() {
               <div className="page-header">
                 <div>
                   <span className="eyebrow">Client workspace</span>
-                  <h1>{selectedClient.name}</h1>
+                  <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {selectedClient.name}
+                    {selectedClient.profile?.stage && selectedClient.profile.stage !== 'Active'
+                      ? <span className={`client-stage-badge stage-${(selectedClient.profile.stage || '').toLowerCase().replace(' ', '-')}`}>{selectedClient.profile.stage}</span>
+                      : null}
+                  </h1>
                   <p>{dailyImport ? `${dailyImport.status} · ${dailyImport.flags.length} flags` : 'No close loaded for this date'}</p>
                 </div>
                 <div className="header-actions">
                   <label className="date-control"><CalendarDays size={16} /><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} /></label>
                   <button className="secondary-button" onClick={() => setShowUpload((value) => !value)}><Upload size={16} /> Upload Daily Files</button>
-                  <button className="ghost-button" disabled={!dailyImport} onClick={copyClientReport} title="Copy pre-formatted update for WhatsApp/Telegram">
+                  <button className="ghost-button" disabled={!dailyImport} onClick={copyClientReport} title="Copy pre-formatted daily update for WhatsApp/Telegram">
                     <Copy size={16} />{copyDone ? ' Copied!' : ' Copy Update'}
+                  </button>
+                  <button className="ghost-button" disabled={!selectedClient} onClick={copyWeeklyReport} title="Copy weekly summary for WhatsApp/Telegram">
+                    <Copy size={16} />{copyWeekDone ? ' Copied!' : ' Copy Week'}
                   </button>
                   <button className="primary-button" disabled={!dailyImport} onClick={() => setReportImport(dailyImport)}><FileText size={16} /> Build Daily Report</button>
                   {dailyImport?.status === 'Closed'

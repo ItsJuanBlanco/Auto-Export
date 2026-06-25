@@ -1778,3 +1778,11 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .payout-alert-panel { border-left: 3px solid var(--green); }
 .payout-progress-wrap { height: 4px; background: var(--surface-3); border-radius: 2px; margin-top: 6px; overflow: hidden; }
 .payout-progress-bar { height: 4px; border-radius: 2px; transition: width 0.3s; }
+
+/* Client stage badges */
+.client-stage-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; vertical-align: middle; }
+.stage-onboarding { background: rgba(69,163,255,0.15); color: #1a6fb5; }
+.stage-active     { background: rgba(47,202,115,0.15); color: var(--green); }
+.stage-at-risk    { background: rgba(255,90,105,0.15); color: var(--red); }
+.stage-paused     { background: rgba(144,164,184,0.15); color: var(--muted); }
+.stage-inactive   { background: rgba(144,164,184,0.10); color: var(--muted); }
