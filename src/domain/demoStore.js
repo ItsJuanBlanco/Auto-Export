@@ -564,7 +564,7 @@ export function appendDailyImport(state, clientId, importResult) {
       dailyImports: [
         ...client.dailyImports.filter(d => d.date !== importResult.date),
         merged,
-      ].sort((a, b) => String(a.date).localeCompare(String(b.date))),
+      ].sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(-180),
     };
   });
 }
