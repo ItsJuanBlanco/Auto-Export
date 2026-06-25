@@ -2903,13 +2903,17 @@ function buildTodayBriefing(clients) {
     const dailyPnl = (latest?.snapshots || []).reduce((s, snap) => s + Number(snap.grossRealizedPnl || 0), 0);
     const closeStatus = !todayImport ? 'pending' : todayImport.status === 'Closed' ? 'closed' : 'uploaded';
 
+    const daysSinceContact = lastContactDaysAgo(client);
+    const staleContact = daysSinceContact === null || daysSinceContact >= 7;
+
     const urgency = criticalFlags.length > 0 ? 'critical'
       : overdueTasks.length > 0 ? 'warning'
       : highTasks.length > 0 || payoutAccounts.length > 0 ? 'info'
+      : staleContact ? 'info'
       : closeStatus === 'pending' ? 'pending'
       : 'ok';
 
-    return { client, criticalFlags, openFlags, openTasks, overdueTasks, highTasks, payoutAccounts, dailyPnl, closeStatus, urgency };
+    return { client, criticalFlags, openFlags, openTasks, overdueTasks, highTasks, payoutAccounts, dailyPnl, closeStatus, urgency, staleContact, daysSinceContact };
   }).sort((a, b) => {
     const order = { critical: 0, warning: 1, info: 2, pending: 3, ok: 4 };
     return order[a.urgency] - order[b.urgency];
@@ -3202,6 +3206,7 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
   const criticalFlagsOpen = clients.reduce((n, c) => {
     return n + (c.dailyImports || []).reduce((m, di) => m + (di.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved').length, 0);
   }, 0);
+  const staleContactClients = clients.filter(c => { const d = lastContactDaysAgo(c); return d === null || d >= 7; }).length;
 
   return (
     <main className="content">
@@ -3228,6 +3233,12 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
             <div className="metric" style={{textAlign:'right'}}>
               <span>Critical flags</span>
               <strong className="negative" style={{fontSize:20}}>{criticalFlagsOpen}</strong>
+            </div>
+          )}
+          {staleContactClients > 0 && (
+            <div className="metric" style={{textAlign:'right'}}>
+              <span>No contact 7d+</span>
+              <strong className="warning" style={{fontSize:20}}>{staleContactClients}</strong>
             </div>
           )}
           {(openTasksToday > 0 || overdueTotal > 0) && (
@@ -3423,7 +3434,8 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
                     {highTasks.length && !overdueTasks.length ? <span className="task-chip task-chip-due warning">{highTasks.length} high tasks</span> : null}
                     {payoutAccounts.length ? <span className="task-chip">{payoutAccounts.length} payout</span> : null}
                     {openTasks.length ? <span className="task-chip">{openTasks.length} tasks</span> : null}
-                    {!criticalFlags.length && !openFlags.length && !overdueTasks.length && !highTasks.length && !payoutAccounts.length && !openTasks.length
+                    {staleContact ? <span className="task-chip task-chip-due warning" title={daysSinceContact === null ? 'No contact logged' : `Last contact ${daysSinceContact}d ago`}>{daysSinceContact === null ? 'No contact' : `${daysSinceContact}d silent`}</span> : null}
+                    {!criticalFlags.length && !openFlags.length && !overdueTasks.length && !highTasks.length && !payoutAccounts.length && !openTasks.length && !staleContact
                       ? <span className="task-chip" style={{ color: 'var(--green)' }}>Clean</span>
                       : null}
                   </div>
