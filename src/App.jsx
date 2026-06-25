@@ -1005,6 +1005,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [teamCopyDone, setTeamCopyDone] = useState(false);
   const [fundedSort, setFundedSort] = useState({ col: 'buffer', dir: -1 });
+  const [managerSearch, setManagerSearch] = useState('');
   const teamHistory = buildTeamHistory(clients);
   const cams = (camProfiles.length ? camProfiles : createDemoState().camProfiles).map((profile) => {
     const summary = buildManagerSummary(clientsForCam(clients, profile));
@@ -1054,7 +1055,29 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           <small className="sidebar-role-sub">{session?.displayName || session?.username || 'Manager'}</small>
         </div>
         <button className="client-link active"><Users size={16} /><span>Operations</span><em>Live</em></button>
-        {cams.map((cam) => (
+        <input
+          className="client-search"
+          value={managerSearch}
+          placeholder="Search clients..."
+          onChange={e => setManagerSearch(e.target.value)}
+          style={{margin:'8px 8px 4px'}}
+        />
+        {managerSearch.length >= 2 ? (() => {
+          const q = managerSearch.toLowerCase();
+          const results = clients.flatMap(c => {
+            const cam = camProfiles.find(p => (p.clientIds || []).includes(c.id));
+            const nameMatch = c.name?.toLowerCase().includes(q);
+            const accountMatch = Object.keys(c.accountRegistry || {}).some(k => k.toLowerCase().includes(q) || (c.accountRegistry[k].alias || '').toLowerCase().includes(q));
+            if (!nameMatch && !accountMatch) return [];
+            return [{ client: c, cam, nameMatch, accountMatch }];
+          });
+          return results.length ? results.map(({ client, cam }) => (
+            <button key={client.id} className="client-link client-link-search" onClick={() => { onOpenCam(cam?.id, client.id); setManagerSearch(''); }}>
+              <span>{client.name}</span>
+              <small className="muted">{cam?.name || '—'}</small>
+            </button>
+          )) : <div className="nav-label muted" style={{padding:'4px 12px',fontSize:12}}>No match</div>;
+        })() : cams.map((cam) => (
           <button className="client-link" key={cam.id} onClick={() => onOpenCam(cam.id)}>
             <BarChart3 size={16} />
             <span>{cam.name}</span>
