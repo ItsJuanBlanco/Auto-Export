@@ -1021,7 +1021,13 @@ function buildAllFundedAccounts(clients = [], camProfiles = []) {
       });
     }
   }
-  rows.sort((a, b) => (a.bufferPct !== null && b.bufferPct !== null ? a.bufferPct - b.bufferPct : 0));
+  rows.sort((a, b) => {
+    // Model-1: sort by % remaining (ascending = most at risk first)
+    // Model-2: normalize $0-$2500 buffer into 0-100 scale for consistent ordering
+    const riskA = a.bufferPct !== null ? a.bufferPct : (a.buffer > 0 ? Math.min(100, (a.buffer / 2500) * 100) : 0);
+    const riskB = b.bufferPct !== null ? b.bufferPct : (b.buffer > 0 ? Math.min(100, (b.buffer / 2500) * 100) : 0);
+    return riskA - riskB;
+  });
   return rows;
 }
 
@@ -1173,8 +1179,10 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     // Deduct for overdue tasks
     const overdueTasks = clients.reduce((n, c) => n + (c.tasks || []).filter(t => !t.done && t.dueDate && t.dueDate < today).length, 0);
     score -= Math.min(overdueTasks * 3, 20);
-    // Deduct for accounts at critical drawdown (buffer <= 10%)
-    const critBufferAccounts = allFunded.filter(r => r.bufferPct !== null && r.bufferPct <= 10).length;
+    // Deduct for accounts at critical drawdown (model-1: ≤10% remaining; model-2: ≤$500 remaining)
+    const critBufferAccounts = allFunded.filter(r =>
+      (r.bufferPct !== null && r.bufferPct <= 10) || (r.bufferPct === null && r.buffer > 0 && r.buffer <= 500)
+    ).length;
     score -= Math.min(critBufferAccounts * 5, 20);
     const clamped = Math.max(0, Math.min(100, score));
     const label = clamped >= 85 ? 'Excellent' : clamped >= 70 ? 'Good' : clamped >= 50 ? 'Fair' : 'At Risk';
