@@ -1741,11 +1741,174 @@ function buildTodayBriefing(clients) {
   });
 }
 
+// ── Insight Feed ─────────────────────────────────────────────────────────────
+// Aggregates all notable signals across a CAM's portfolio into one prioritized list
+function buildPortfolioInsights(clients, allClients = []) {
+  const insights = [];
+  const today = todayIsoDate();
+
+  for (const client of clients) {
+    const registry = client.accountRegistry || {};
+    const latest = client.dailyImports?.at(-1);
+    const snapshots = latest?.snapshots || [];
+    const imports = client.dailyImports || [];
+
+    // 1. Drawdown velocity — project breach date from last 7-day buffer consumption
+    for (const snap of snapshots) {
+      const meta = registry[snap.accountName] || {};
+      if (meta.accountType !== 'Funded') continue;
+      if (meta.status === 'Failed' || meta.status === 'Inactive') continue;
+
+      const buffer = Number(snap.trailingMaxDrawdown || 0);
+      if (buffer <= 0) continue; // already breached
+
+      // Compute daily buffer change over last 7 imports
+      const last7 = imports.slice(-7);
+      if (last7.length < 3) continue;
+      const buffers = last7.map((di) => {
+        const s = (di.snapshots || []).find((x) => x.accountName === snap.accountName);
+        return s ? Number(s.trailingMaxDrawdown || 0) : null;
+      }).filter((v) => v !== null);
+
+      if (buffers.length < 2) continue;
+      const dailyChange = (buffers.at(-1) - buffers[0]) / (buffers.length - 1);
+      if (dailyChange >= 0) continue; // buffer growing — no concern
+      const daysToBreech = Math.floor(buffer / Math.abs(dailyChange));
+
+      if (daysToBreech <= 5) {
+        insights.push({
+          severity: daysToBreech <= 2 ? 'critical' : 'warning',
+          type: 'Drawdown Velocity',
+          clientId: client.id,
+          clientName: client.name,
+          accountAlias: meta.alias || snap.accountName,
+          message: `Buffer ${formatCurrency(buffer)} depleting ~${formatCurrency(Math.abs(dailyChange))}/day — projected breach in ${daysToBreech} trading day${daysToBreech !== 1 ? 's' : ''}`,
+          action: 'Review stack or reduce position size',
+        });
+      }
+    }
+
+    // 2. Consistency rule — best day > 30% of total positive P&L
+    const consistencyWarnings = buildConsistencyWarnings(client);
+    for (const w of consistencyWarnings) {
+      insights.push({
+        severity: w.severity === 'Critical' ? 'critical' : 'warning',
+        type: 'Consistency Rule',
+        clientId: client.id,
+        clientName: client.name,
+        accountAlias: w.alias,
+        message: `Best day (${formatCurrency(w.bestDayPnl)} on ${w.bestDayDate}) is ${Math.round(w.ratio * 100)}% of total gains — consistency rule at risk`,
+        action: 'Consider reducing position on strong days',
+      });
+    }
+
+    // 3. Payout opportunity — funded account near target
+    if (latest) {
+      const payoutAlerts = buildPayoutAlerts(client, latest);
+      for (const a of payoutAlerts) {
+        insights.push({
+          severity: a.ready ? 'info-green' : 'info',
+          type: 'Payout Opportunity',
+          clientId: client.id,
+          clientName: client.name,
+          accountAlias: a.alias,
+          message: a.ready
+            ? `Target reached — ${formatCurrency(a.profit)} profit vs ${formatCurrency(a.target)} goal. Request payout.`
+            : `${a.pct}% of payout target — ${formatCurrency(a.target - a.profit)} remaining`,
+          action: a.ready ? 'Request payout now' : 'Monitor until target',
+        });
+      }
+    }
+
+    // 4. Account not uploading (no close today or yesterday)
+    const todayImport = getClientImportByDate(client, today);
+    if (!todayImport) {
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+      const yest = yesterday.toISOString().slice(0, 10);
+      const yesterdayImport = getClientImportByDate(client, yest);
+      if (!yesterdayImport && imports.length > 0) {
+        insights.push({
+          severity: 'warning',
+          type: 'Missing Close',
+          clientId: client.id,
+          clientName: client.name,
+          accountAlias: null,
+          message: `No daily close uploaded in the last 2 days`,
+          action: 'Check VPS connection and upload NT CSV',
+        });
+      }
+    }
+  }
+
+  const order = { critical: 0, warning: 1, 'info-green': 2, info: 3 };
+  return insights.sort((a, b) => (order[a.severity] ?? 4) - (order[b.severity] ?? 4));
+}
+
+function InsightFeedPanel({ insights, onSelectClient }) {
+  if (!insights.length) {
+    return (
+      <section className="panel">
+        <div className="panel-heading"><h3>Insight Feed</h3><span className="badge success">All clear</span></div>
+        <p className="muted" style={{ padding: '8px 0' }}>No signals across your portfolio right now. Keep uploading daily closes for continuous monitoring.</p>
+      </section>
+    );
+  }
+
+  const criticalCount = insights.filter((i) => i.severity === 'critical').length;
+  const warningCount  = insights.filter((i) => i.severity === 'warning').length;
+
+  const severityConfig = {
+    critical:    { label: 'Critical',    cls: 'insight-critical',   dot: '#ff5a69' },
+    warning:     { label: 'Warning',     cls: 'insight-warning',    dot: '#f4bb44' },
+    'info-green':{ label: 'Opportunity', cls: 'insight-opportunity',dot: '#2fca73' },
+    info:        { label: 'Info',        cls: 'insight-info',       dot: '#45a3ff' },
+  };
+
+  return (
+    <section className={`panel ${criticalCount ? 'danger-panel' : ''}`}>
+      <div className="panel-heading">
+        <h3>Insight Feed</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {criticalCount ? <span className="badge danger">{criticalCount} critical</span> : null}
+          {warningCount  ? <span className="badge warning">{warningCount} warning</span>  : null}
+          <span className="badge muted">{insights.length} signals</span>
+        </div>
+      </div>
+      <div className="insight-feed">
+        {insights.map((item, i) => {
+          const cfg = severityConfig[item.severity] || severityConfig.info;
+          return (
+            <button
+              key={i}
+              className={`insight-item ${cfg.cls}`}
+              onClick={() => onSelectClient && onSelectClient(item.clientId)}
+              title={`Open ${item.clientName}`}
+            >
+              <span className="insight-dot" style={{ background: cfg.dot }} />
+              <div className="insight-body">
+                <div className="insight-head">
+                  <span className="insight-type">{item.type}</span>
+                  <span className="insight-client">{item.clientName}</span>
+                  {item.accountAlias ? <span className="insight-account">· {item.accountAlias}</span> : null}
+                </div>
+                <p className="insight-message">{item.message}</p>
+                <small className="insight-action">→ {item.action}</small>
+              </div>
+              <span className={`insight-severity-badge insight-sev-${item.severity}`}>{cfg.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
   const overview = buildCamOverview(clients, strategySetRecords);
   const displayName = camName || 'this workspace';
   const briefing = buildTodayBriefing(clients);
+  const insights = buildPortfolioInsights(clients, allClients);
 
   const urgencyCounts = { critical: 0, warning: 0, info: 0, pending: 0, ok: 0 };
   briefing.forEach((b) => { urgencyCounts[b.urgency] = (urgencyCounts[b.urgency] || 0) + 1; });
@@ -1759,6 +1922,8 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
           <p>Algorithm performance across {displayName}'s latest client closes.</p>
         </div>
       </div>
+
+      <InsightFeedPanel insights={insights} onSelectClient={onSelectClient} />
 
       {clients.length > 0 ? (
         <section className={urgencyCounts.critical ? 'panel danger-panel' : 'panel'}>

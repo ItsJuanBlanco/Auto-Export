@@ -1792,3 +1792,32 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .playbook-has-suggestions { border-left: 3px solid var(--yellow); }
 .playbook-suggestion { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--yellow); }
 .playbook-suggestion strong { color: var(--text); }
+
+/* Insight Feed */
+.insight-feed { display: flex; flex-direction: column; gap: 6px; }
+.insight-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; text-align: left; width: 100%; cursor: pointer;
+  transition: background 0.15s;
+}
+.insight-item:hover { background: var(--surface-3); }
+.insight-critical { border-left: 3px solid var(--red); }
+.insight-warning  { border-left: 3px solid var(--yellow); }
+.insight-opportunity { border-left: 3px solid var(--green); }
+.insight-info     { border-left: 3px solid var(--blue); }
+
+.insight-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+.insight-body { flex: 1; min-width: 0; }
+.insight-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
+.insight-type { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.insight-client { font-weight: 700; font-size: 13px; }
+.insight-account { font-size: 12px; color: var(--muted); }
+.insight-message { margin: 0 0 3px; font-size: 13px; color: var(--text); line-height: 1.4; }
+.insight-action { font-size: 11px; color: var(--muted); font-style: italic; }
+
+.insight-severity-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; flex-shrink: 0; }
+.insight-sev-critical    { background: rgba(255,90,105,0.15); color: var(--red); }
+.insight-sev-warning     { background: rgba(244,187,68,0.15); color: var(--yellow); }
+.insight-sev-info-green  { background: rgba(47,202,115,0.15); color: var(--green); }
+.insight-sev-info        { background: rgba(69,163,255,0.15); color: var(--blue); }
