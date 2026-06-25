@@ -123,6 +123,32 @@ function buildTodayActions(client, dailyImport) {
     }
   }
 
+  // Unclassified accounts
+  if (dailyImport) {
+    const unassigned = (dailyImport.snapshots || []).filter((s) => {
+      const meta = { ...(dailyImport.accounts || {}), ...(client.accountRegistry || {}) }[s.accountName];
+      return !meta || meta.accountType === 'Unassigned' || !meta.accountType;
+    });
+    if (unassigned.length) {
+      actions.push({ severity: 'warning', icon: '📂', text: `${unassigned.length} account${unassigned.length > 1 ? 's' : ''} unclassified — go to Review tab to assign type` });
+    }
+  }
+
+  // Funded accounts with no active strategy
+  if (dailyImport) {
+    const registry = { ...(dailyImport.accounts || {}), ...(client.accountRegistry || {}) };
+    const noStrat = (dailyImport.snapshots || []).filter((s) => {
+      const meta = registry[s.accountName];
+      if (meta?.accountType !== 'Funded') return false;
+      const active = (s.strategies || []).filter((st) => st.enabled);
+      return active.length === 0;
+    });
+    for (const s of noStrat.slice(0, 2)) {
+      const alias = registry[s.accountName]?.alias || s.accountName;
+      actions.push({ severity: 'warning', icon: '⚙️', text: `No active strategy on ${alias} — check Stack Playbook` });
+    }
+  }
+
   return actions;
 }
 
