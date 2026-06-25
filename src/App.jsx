@@ -4114,10 +4114,43 @@ export default function App() {
       ) : (
         <main className="content">
           {!selectedClient ? (
-            <div className="empty-state">
-              <Users size={28} />
-              <h2>Create your first client</h2>
-              <p>Add a client for {currentCamProfile?.name || 'this CAM'}, then upload that client's NinjaTrader files.</p>
+            <div className="onboarding-empty">
+              <div className="onboarding-hero">
+                <Users size={36} />
+                <h2>Welcome, {session?.displayName || currentCamProfile?.name || 'CAM'}</h2>
+                <p className="muted">Your workspace is ready. Here's how to get started:</p>
+              </div>
+              <div className="onboarding-steps">
+                <div className="onboarding-step">
+                  <span className="onboarding-step-num">1</span>
+                  <div>
+                    <strong>Add your clients</strong>
+                    <p>Use the <em>+ Add client</em> button in the left sidebar to create a client profile for each trader you manage. Enter their name, then configure their accounts in the Account Registry tab.</p>
+                  </div>
+                </div>
+                <div className="onboarding-step">
+                  <span className="onboarding-step-num">2</span>
+                  <div>
+                    <strong>Fill in client profile & credentials</strong>
+                    <p>In <em>Credentials & Notes</em>, save the client's VPS IP, NinjaTrader login, email, and Telegram handle. This is your quick-access reference during market hours.</p>
+                  </div>
+                </div>
+                <div className="onboarding-step">
+                  <span className="onboarding-step-num">3</span>
+                  <div>
+                    <strong>Upload daily NT files</strong>
+                    <p>After market close, export the Accounts + Strategies CSV from NinjaTrader and upload both here. The dashboard auto-generates flags, drawdown status, and the client report.</p>
+                  </div>
+                </div>
+                <div className="onboarding-step">
+                  <span className="onboarding-step-num">4</span>
+                  <div>
+                    <strong>Log activity & tasks</strong>
+                    <p>Use <em>Quick Log</em> (Alt+L) to record calls, messages, and observations. Create tasks with due dates so nothing falls through the cracks.</p>
+                  </div>
+                </div>
+              </div>
+              <p className="muted" style={{textAlign:'center',fontSize:12,marginTop:16}}>Tip: press <kbd>Alt+O</kbd> for CAM Overview · <kbd>Alt+S</kbd> for Daily SOP · <kbd>Alt+L</kbd> to quick-log</p>
             </div>
           ) : (
             <>
