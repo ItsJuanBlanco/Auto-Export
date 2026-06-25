@@ -420,16 +420,24 @@ export default function Dashboard({ dailyImport, rows = [], title, mode, onBuild
         {flags.length ? (
           <div className="flag-list">
             {flags.map((flag) => (
-              <div className={flag.status === 'Resolved' ? 'flag resolved' : `flag ${flag.severity.toLowerCase()}`} key={flag.id}>
+              <div className={flag.status === 'Resolved' ? 'flag resolved' : flag.status === 'Acknowledged' ? 'flag acknowledged' : `flag ${flag.severity.toLowerCase()}`} key={flag.id}>
                 {flag.severity === 'Critical' ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
                 <div>
-                  <strong>{flag.type}{flag.status === 'Resolved' ? <span className="flag-resolved-badge">Resolved</span> : null}</strong>
+                  <strong>{flag.type}
+                    {flag.status === 'Resolved' ? <span className="flag-resolved-badge">Resolved</span> : null}
+                    {flag.status === 'Acknowledged' ? <span className="flag-resolved-badge" style={{background:'var(--surface-3)',color:'var(--text-muted)'}}>Ack'd</span> : null}
+                  </strong>
                   <span>{flag.message}</span>
                 </div>
-                {flag.status !== 'Resolved' && onResolveFlag ? (
-                  <button className="ghost-button icon-only flag-resolve-btn" title="Mark resolved" onClick={() => onResolveFlag(flag.id)}>
-                    <X size={14} />
-                  </button>
+                {flag.status !== 'Resolved' && flag.status !== 'Acknowledged' && onResolveFlag ? (
+                  <div style={{display:'flex',gap:4,flexShrink:0}}>
+                    {flag.severity !== 'Critical' && (
+                      <button className="ghost-button icon-only flag-resolve-btn" title="Acknowledge — seen, not blocking" style={{fontSize:10,padding:'2px 6px',width:'auto'}} onClick={() => onResolveFlag(flag.id, 'Acknowledged')}>Ack</button>
+                    )}
+                    <button className="ghost-button icon-only flag-resolve-btn" title="Mark resolved" onClick={() => onResolveFlag(flag.id, 'Resolved')}>
+                      <X size={14} />
+                    </button>
+                  </div>
                 ) : null}
               </div>
             ))}

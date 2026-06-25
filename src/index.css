@@ -1787,6 +1787,7 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .flag-resolve-btn { flex-shrink: 0; margin-top: 2px; padding: 4px 6px; opacity: 0.45; border-radius: 6px; }
 .flag-resolve-btn:hover { opacity: 1; background: var(--surface-3); }
 .flag.resolved { opacity: 0.45; background: var(--surface-2) !important; border-color: var(--line) !important; }
+.flag.acknowledged { opacity: 0.6; background: var(--surface-2) !important; border-color: var(--line) !important; color: var(--text-muted) !important; }
 .flag-resolved-badge {
   display: inline-block;
   margin-left: 8px;

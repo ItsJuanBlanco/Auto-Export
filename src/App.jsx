@@ -94,7 +94,7 @@ function deriveClientBadge(client) {
   if (!latest) return { label: 'No data', tone: 'muted' };
   const critical = latest.flags.filter((flag) => flag.severity === 'Critical' && flag.status !== 'Resolved').length;
   if (critical) return { label: `${critical} critical`, tone: 'danger' };
-  const open = latest.flags.filter((f) => f.status !== 'Resolved').length;
+  const open = latest.flags.filter((f) => f.status !== 'Resolved' && f.status !== 'Acknowledged').length;
   if (open) return { label: `${open} flags`, tone: 'warning' };
   const today = todayIsoDate();
   const overdue = (client.tasks || []).filter((t) => !t.done && t.dueDate && t.dueDate < today).length;
@@ -941,7 +941,7 @@ function buildCamPerformance(clients = [], camProfiles = []) {
       if (meta.accountType === 'Funded') bucket.funded++;
       else if (meta.accountType?.startsWith('Evaluation')) bucket.evaluations++;
     }
-    bucket.openFlags += (latest.flags || []).filter((f) => f.status !== 'Resolved').length;
+    bucket.openFlags += (latest.flags || []).filter((f) => f.status !== 'Resolved' && f.status !== 'Acknowledged').length;
     // Monthly P&L across all imports this month
     for (const di of client.dailyImports || []) {
       if (!di.date?.startsWith(currentMonth)) continue;
@@ -1309,7 +1309,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
             const latest = client.dailyImports?.at(-1);
             const pnl = (latest?.snapshots || []).reduce((s, sn) => s + Number(sn.grossRealizedPnl || 0), 0);
             const openTasks = (client.tasks || []).filter(t => !t.done).length;
-            const openFlags = (latest?.flags || []).filter(f => f.status !== 'Resolved').length;
+            const openFlags = (latest?.flags || []).filter(f => f.status !== 'Resolved' && f.status !== 'Acknowledged').length;
             (byStage[stage] || (byStage[stage] = [])).push({ client, cam, pnl, openTasks, openFlags });
           }
           return (
@@ -1438,7 +1438,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
           const allFlags = clients.flatMap(c =>
             (c.dailyImports || []).flatMap(di =>
               (di.flags || [])
-                .filter(f => f.status !== 'Resolved')
+                .filter(f => f.status !== 'Resolved' && f.status !== 'Acknowledged')
                 .map(f => {
                   const cam = camProfiles.find(p => (p.clientIds || []).includes(c.id));
                   return { ...f, clientName: c.name, clientId: c.id, importId: di.id, camId: cam?.id, camName: cam?.name, date: di.date };
@@ -2916,7 +2916,7 @@ function buildTodayBriefing(clients) {
     const todayImport = getClientImportByDate(client, today);
     const latest = client.dailyImports?.at(-1) || null;
     const criticalFlags = (latest?.flags || []).filter((f) => f.severity === 'Critical' && f.status !== 'Resolved');
-    const openFlags = (latest?.flags || []).filter((f) => f.status !== 'Resolved');
+    const openFlags = (latest?.flags || []).filter((f) => f.status !== 'Resolved' && f.status !== 'Acknowledged');
     const openTasks = (client.tasks || []).filter((t) => !t.done);
     const overdueTasks = openTasks.filter((t) => t.dueDate && t.dueDate < today);
     const highTasks = openTasks.filter((t) => t.priority === 'High');
@@ -4551,12 +4551,12 @@ export default function App() {
     setState((current) => removeClient(current, selectedClient.id));
   }
 
-  function handleResolveFlag(flagId) {
+  function handleResolveFlag(flagId, status = 'Resolved') {
     if (!selectedClient || !dailyImport) return;
     const flag = (dailyImport.flags || []).find((f) => f.id === flagId);
     setState((current) => {
-      let next = resolveFlagInImport(current, selectedClient.id, dailyImport.id, flagId);
-      if (flag) {
+      let next = resolveFlagInImport(current, selectedClient.id, dailyImport.id, flagId, status);
+      if (flag && status === 'Resolved') {
         const entry = {
           id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           type: 'Alert',
@@ -4723,8 +4723,8 @@ export default function App() {
         }
         teamAnnouncement={state.teamAnnouncement || ''}
         onSetAnnouncement={msg => setState(s => ({ ...s, teamAnnouncement: msg }))}
-        onResolveFlag={(clientId, importId, flagId) =>
-          setState((current) => resolveFlagInImport(current, clientId, importId, flagId))
+        onResolveFlag={(clientId, importId, flagId, status = 'Resolved') =>
+          setState((current) => resolveFlagInImport(current, clientId, importId, flagId, status))
         }
         onAddClient={(name, camId, stage) => setState(current => {
           const withClient = addClient(current, name, camId || null);

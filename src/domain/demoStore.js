@@ -461,12 +461,12 @@ export function selectClient(state, clientId) {
   };
 }
 
-export function resolveFlagInImport(state, clientId, importId, flagId) {
+export function resolveFlagInImport(state, clientId, importId, flagId, status = 'Resolved') {
   return updateClient(state, clientId, (client) => ({
     ...client,
     dailyImports: (client.dailyImports || []).map((di) =>
       di.id === importId
-        ? { ...di, flags: di.flags.map((f) => f.id === flagId ? { ...f, status: 'Resolved', resolvedAt: new Date().toISOString() } : f) }
+        ? { ...di, flags: di.flags.map((f) => f.id === flagId ? { ...f, status, resolvedAt: new Date().toISOString() } : f) }
         : di
     ),
   }));
