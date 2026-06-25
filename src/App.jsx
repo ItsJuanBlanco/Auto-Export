@@ -3270,11 +3270,21 @@ export default function App() {
           onChange={(e) => setClientSearch(e.target.value)}
         />
         <nav className="client-list">
-          <button className={showOverview && !showSOP ? 'client-link active' : 'client-link'} onClick={() => { setShowOverview(true); setShowSOP(false); }}>
-            <Users size={16} />
-            <span>CAM Overview</span>
-            <em>Live</em>
-          </button>
+          {(() => {
+            const today = todayIsoDate();
+            const urgentCount = currentCamClients.reduce((total, c) => {
+              const critFlags = (c.dailyImports?.at(-1)?.flags || []).filter(f => f.severity === 'Critical' && f.status !== 'Resolved').length;
+              const overdueTasks = (c.tasks || []).filter(t => !t.done && t.dueDate && t.dueDate < today).length;
+              return total + critFlags + overdueTasks;
+            }, 0);
+            return (
+              <button className={showOverview && !showSOP ? 'client-link active' : 'client-link'} onClick={() => { setShowOverview(true); setShowSOP(false); }}>
+                <Users size={16} />
+                <span>CAM Overview</span>
+                {urgentCount > 0 ? <em className="danger">{urgentCount} urgent</em> : <em>Live</em>}
+              </button>
+            );
+          })()}
           <button className={showSOP ? 'client-link active' : 'client-link'} onClick={() => { setShowSOP(true); setShowOverview(false); setShowSOP(false); }}>
             <CheckSquare size={16} />
             <span>Daily SOP</span>
