@@ -1377,7 +1377,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                   return { client, result, accountCount: myAccounts.length };
                 } catch { return null; }
               }).filter(Boolean);
-              const unmatched = [...accountNames].filter(an => !clients.some(c => Object.keys(c.accountRegistry || {}).includes(an)));
+              const unmatched = [...new Set((grouped.accounts || []).map(a => a.accountName))].filter(an => !clients.some(c => Object.keys(c.accountRegistry || {}).map(k => k.toLowerCase()).includes(an.toLowerCase())));
               setBatchImportResult({ clientMatches, unmatched, today, filesLoaded: files.length });
             }}>
               <span>Drag & drop NT CSV files here</span>
