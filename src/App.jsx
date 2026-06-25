@@ -2650,13 +2650,29 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
   const urgencyCounts = { critical: 0, warning: 0, info: 0, pending: 0, ok: 0 };
   briefing.forEach((b) => { urgencyCounts[b.urgency] = (urgencyCounts[b.urgency] || 0) + 1; });
 
+  const today = todayIsoDate();
+  const closeStats = (() => {
+    const withUpload = clients.filter(c => getClientImportByDate(c, today));
+    const closed = withUpload.filter(c => getClientImportByDate(c, today)?.status === 'Closed');
+    return { total: clients.length, withUpload: withUpload.length, closed: closed.length };
+  })();
+  const closePct = closeStats.total ? Math.round((closeStats.closed / closeStats.total) * 100) : 0;
+
   return (
     <main className="content">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Account manager overview</span>
+          <span className="eyebrow">Account manager overview · {today}</span>
           <h1>CAM Overview</h1>
-          <p>Algorithm performance across {displayName}'s latest client closes.</p>
+          <div className="occ-status-row" style={{marginTop:6}}>
+            <span className="occ-live-dot" />
+            <span>{closeStats.closed}/{closeStats.total} clients closed today</span>
+            {closeStats.withUpload > closeStats.closed && <span className="muted">· {closeStats.withUpload - closeStats.closed} uploaded, not closed</span>}
+            {closeStats.total > closeStats.withUpload && <span className="negative">· {closeStats.total - closeStats.withUpload} no upload</span>}
+          </div>
+          <div style={{marginTop:8,background:'var(--line)',borderRadius:4,height:6,width:220,overflow:'hidden'}}>
+            <div style={{height:'100%',width:`${closePct}%`,background:closePct===100?'var(--green)':'var(--accent)',transition:'width .4s ease',borderRadius:4}} />
+          </div>
         </div>
       </div>
 
