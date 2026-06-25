@@ -1069,6 +1069,25 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   const camPerf = buildCamPerformance(clients, camProfiles);
   const managerInsights = buildPortfolioInsights(clients, clients);
   const allFunded = buildAllFundedAccounts(clients, camProfiles);
+  const allEvals = (() => {
+    const rows = [];
+    for (const client of clients) {
+      const cam = camProfiles.find(p => (p.clientIds || []).includes(client.id));
+      const reg = client.accountRegistry || {};
+      const latestImport = (client.dailyImports || []).at(-1);
+      for (const [accountName, meta] of Object.entries(reg)) {
+        if (!meta.accountType?.startsWith('Evaluation')) continue;
+        if (meta.status === 'Failed' || meta.status === 'Inactive') continue;
+        const snap = (latestImport?.snapshots || []).find(s => s.accountName === accountName);
+        const dailyPnl = Number(snap?.grossRealizedPnl || 0);
+        const weeklyPnl = Number(snap?.weeklyPnl || 0);
+        const target = Number(meta.targetProfit || 0);
+        const targetPct = target > 0 && weeklyPnl ? Math.round((weeklyPnl / target) * 100) : null;
+        rows.push({ accountName, alias: meta.alias || accountName, clientName: client.name, clientId: client.id, camName: cam?.name || '—', accountType: meta.accountType, bulletBotPassType: meta.bulletBotPassType || '', dailyPnl, weeklyPnl, targetPct, status: meta.status || 'Active' });
+      }
+    }
+    return rows.sort((a, b) => (b.weeklyPnl - a.weeklyPnl));
+  })();
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const monthlyKpis = (() => {
@@ -1549,6 +1568,34 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                             }}>✕ Mark Failed</button>
                         ) : null}
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {allEvals.length > 0 && (
+          <section className="panel">
+            <div className="panel-heading">
+              <h3>All evaluation accounts</h3>
+              <span className="badge muted">{allEvals.length} active</span>
+            </div>
+            <div className="table-wrap">
+              <table className="ops-table">
+                <thead><tr><th>Account</th><th>Client</th><th>CAM</th><th>Type</th><th>Pass</th><th>Daily PnL</th><th>Weekly PnL</th><th>Target %</th></tr></thead>
+                <tbody>
+                  {allEvals.map(row => (
+                    <tr key={`${row.clientId}-${row.accountName}`} style={{cursor:'pointer'}} onClick={() => { const cam = camProfiles.find(c => c.clientIds?.includes(row.clientId)); onOpenCam(cam?.id, row.clientId); }}>
+                      <td><strong>{row.alias}</strong><small>{row.accountName}</small></td>
+                      <td>{row.clientName}</td>
+                      <td><small>{row.camName}</small></td>
+                      <td><small>{row.accountType?.replace('Evaluation - ', '')}</small></td>
+                      <td><small>{row.bulletBotPassType || '—'}</small></td>
+                      <td className={row.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.dailyPnl)}</td>
+                      <td className={row.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(row.weeklyPnl)}</td>
+                      <td>{row.targetPct !== null ? <span className={row.targetPct >= 100 ? 'positive' : row.targetPct >= 70 ? 'warning' : ''}>{row.targetPct}%</span> : <span className="muted">—</span>}</td>
                     </tr>
                   ))}
                 </tbody>
