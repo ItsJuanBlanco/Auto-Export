@@ -895,9 +895,10 @@ function buildCamPerformance(clients = [], camProfiles = []) {
     for (const id of cam.clientIds || []) clientCam[id] = cam.id;
   }
 
+  const currentMonth = new Date().toISOString().slice(0, 7);
   const camMap = {};
   for (const cam of camProfiles) {
-    camMap[cam.id] = { id: cam.id, name: cam.name, weeklyPnl: 0, dailyPnl: 0, funded: 0, evaluations: 0, totalAccounts: 0, openFlags: 0, clients: 0 };
+    camMap[cam.id] = { id: cam.id, name: cam.name, weeklyPnl: 0, dailyPnl: 0, monthlyPnl: 0, funded: 0, evaluations: 0, totalAccounts: 0, openFlags: 0, clients: 0, payoutsThisMonth: 0, payoutsThisMonthCount: 0 };
   }
 
   for (const client of clients) {
@@ -918,6 +919,20 @@ function buildCamPerformance(clients = [], camProfiles = []) {
       else if (meta.accountType?.startsWith('Evaluation')) bucket.evaluations++;
     }
     bucket.openFlags += (latest.flags || []).filter((f) => f.status !== 'Resolved').length;
+    // Monthly P&L across all imports this month
+    for (const di of client.dailyImports || []) {
+      if (!di.date?.startsWith(currentMonth)) continue;
+      bucket.monthlyPnl += (di.snapshots || []).reduce((s, sn) => s + Number(sn.grossRealizedPnl || 0), 0);
+    }
+    // Payouts this month from accountRegistry
+    for (const acct of Object.values(client.accountRegistry || {})) {
+      for (const p of acct.payoutHistory || []) {
+        if (p.date?.startsWith(currentMonth)) {
+          bucket.payoutsThisMonth += Number(p.amount || 0);
+          bucket.payoutsThisMonthCount++;
+        }
+      }
+    }
   }
 
   return Object.values(camMap).sort((a, b) => b.weeklyPnl - a.weeklyPnl);
@@ -1403,11 +1418,12 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                     <th>#</th>
                     <th>CAM</th>
                     <th>Clients</th>
-                    <th>Accounts</th>
                     <th>Funded</th>
                     <th>Evals</th>
                     <th>Daily P&amp;L</th>
                     <th>Weekly P&amp;L</th>
+                    <th>Monthly P&amp;L</th>
+                    <th>Payouts (mo.)</th>
                     <th>Open flags</th>
                   </tr>
                 </thead>
@@ -1417,11 +1433,12 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                       <td><span className="rank-badge">{i + 1}</span></td>
                       <td><strong>{cam.name}</strong></td>
                       <td>{cam.clients}</td>
-                      <td>{cam.totalAccounts}</td>
                       <td>{cam.funded}</td>
                       <td>{cam.evaluations}</td>
                       <td className={cam.dailyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(cam.dailyPnl)}</td>
                       <td className={cam.weeklyPnl >= 0 ? 'positive' : 'negative'}>{formatCurrency(cam.weeklyPnl)}</td>
+                      <td className={cam.monthlyPnl >= 0 ? 'positive' : 'negative'}><strong>{formatCurrency(cam.monthlyPnl)}</strong></td>
+                      <td className="positive">{cam.payoutsThisMonthCount > 0 ? <><strong>{formatCurrency(cam.payoutsThisMonth)}</strong><small className="muted"> ×{cam.payoutsThisMonthCount}</small></> : <span className="muted">—</span>}</td>
                       <td className={cam.openFlags >= 3 ? 'negative' : ''}>{cam.openFlags}</td>
                     </tr>
                   ))}
