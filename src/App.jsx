@@ -1610,7 +1610,7 @@ function OnboardingChecklist({ client, onSwitchTab }) {
       done: !!(creds.ip && creds.username),
       label: 'Save VPS credentials',
       detail: 'IP, username, password — required for daily check-ins',
-      action: () => onSwitchTab?.('Credentials'),
+      action: () => onSwitchTab?.('Credentials & Notes'),
       actionLabel: 'Open Credentials →',
     },
     {
@@ -3029,6 +3029,7 @@ function TasksTab({ client, onAddTask, onUpdateTask, onDeleteTask }) {
 function CredentialsTab({ client, onUpdateClient }) {
   const credentials = client.credentials || {};
   const profile = client.profile || {};
+  const [showPasswords, setShowPasswords] = useState(false);
 
   function updateProfile(patch) {
     onUpdateClient({ profile: { ...profile, ...patch } });
@@ -3062,14 +3063,19 @@ function CredentialsTab({ client, onUpdateClient }) {
       </section>
 
       <section className="panel">
-        <div className="panel-heading"><h3>VPS / Platform access</h3><Lock size={16} /></div>
+        <div className="panel-heading">
+          <h3>VPS / Platform access</h3><Lock size={16} />
+          <button className="ghost-button" style={{marginLeft:'auto',fontSize:12}} onClick={() => setShowPasswords(v => !v)}>
+            {showPasswords ? '🙈 Hide passwords' : '👁 Show passwords'}
+          </button>
+        </div>
         <div className="form-grid">
           <label>VPS IP<input value={credentials.ip || ''} onChange={(e) => updateCredentials({ ip: e.target.value })} /></label>
           <label>Username<input value={credentials.username || ''} onChange={(e) => updateCredentials({ username: e.target.value })} /></label>
-          <label>Password<input type="password" value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /></label>
+          <label>Password<input type={showPasswords ? 'text' : 'password'} value={credentials.password || ''} onChange={(e) => updateCredentials({ password: e.target.value })} /></label>
           <label>NT login<input value={credentials.ntLogin || ''} placeholder="NinjaTrader username" onChange={(e) => updateCredentials({ ntLogin: e.target.value })} /></label>
           <label>Prop firm login<input value={credentials.firmLogin || ''} placeholder="Dashboard login email" onChange={(e) => updateCredentials({ firmLogin: e.target.value })} /></label>
-          <label>Prop firm password<input type="password" value={credentials.firmPassword || ''} onChange={(e) => updateCredentials({ firmPassword: e.target.value })} /></label>
+          <label>Prop firm password<input type={showPasswords ? 'text' : 'password'} value={credentials.firmPassword || ''} onChange={(e) => updateCredentials({ firmPassword: e.target.value })} /></label>
         </div>
       </section>
 
