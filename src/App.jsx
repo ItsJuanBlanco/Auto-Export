@@ -211,7 +211,7 @@ function filteredAccountsForTab(client, dailyImport, tab) {
   };
 }
 
-function buildVisibleTabs(client, dailyImport) {
+export function buildVisibleTabs(client, dailyImport) {
   const accounts = {
     ...(dailyImport?.accounts || {}),
     ...(client?.accountRegistry || {}),
@@ -423,7 +423,7 @@ export function buildMonthlyTotals(client) {
   return Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
 }
 
-function buildStrategyAnalyzer(clients = []) {
+export function buildStrategyAnalyzer(clients = []) {
   const stratMap = new Map();
   for (const client of clients) {
     const latest = client.dailyImports?.at(-1);
