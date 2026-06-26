@@ -118,10 +118,10 @@ export function deriveClientBadge(client) {
 function lastContactDaysAgo(client) {
   const log = client.activityLog || [];
   if (!log.length) return null;
-  const latest = log.reduce((a, b) => (a.createdAt > b.createdAt ? a : b));
+  // Log is prepended on insert so index 0 is always the most recent entry
+  const latest = log[0];
   if (!latest.createdAt) return null;
-  const diff = Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 86400000);
-  return diff;
+  return Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 86400000);
 }
 
 function buildTodayActions(client, dailyImport) {
