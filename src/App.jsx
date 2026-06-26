@@ -4889,6 +4889,14 @@ export default function App() {
           value={clientSearch}
           placeholder="Filter sidebar..."
           onChange={(e) => setClientSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { setClientSearch(''); }
+            else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              const list = e.currentTarget.closest('aside')?.querySelectorAll('.client-link');
+              if (list?.length) list[0].focus();
+            }
+          }}
         />
         {showDemoBanner && (
           <div className="demo-banner" style={{margin:'6px 0',padding:'8px 10px',background:'var(--yellow-bg,rgba(245,200,60,0.12))',border:'1px solid var(--yellow,#e6b800)',borderRadius:6,fontSize:12,lineHeight:1.45}}>
@@ -4985,6 +4993,10 @@ export default function App() {
                     className={!showOverview && selectedClient?.id === client.id ? 'client-link active' : 'client-link'}
                     key={client.id}
                     onClick={() => { setState((current) => selectClient(current, client.id)); setShowOverview(false); setShowSOP(false); markClientViewed(client.id); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown') { e.preventDefault(); e.currentTarget.nextElementSibling?.focus(); }
+                      else if (e.key === 'ArrowUp') { e.preventDefault(); (e.currentTarget.previousElementSibling || e.currentTarget.closest('aside')?.querySelector('.client-search'))?.focus(); }
+                    }}
                   >
                     <span className={`close-dot close-dot-${closeStatus}`} title={closeStatus === 'no-close' ? 'No files today' : closeStatus === 'closed' ? 'Closed today' : 'Uploaded · not closed'} />
                     {closeStatus === 'uploaded' && !viewedClientIds.has(client.id) && <span className="new-data-badge" title="New data uploaded — not yet reviewed">NEW</span>}
