@@ -3018,6 +3018,12 @@ function buildTodayBriefing(clients) {
 
 // ── Insight Feed ─────────────────────────────────────────────────────────────
 // Aggregates all notable signals across a CAM's portfolio into one prioritized list
+function remainingBuffer(s, m) {
+  const ddLimit = Number(m?.maxDrawdownLimit || 0);
+  const rawDD = Number(s?.trailingMaxDrawdown || 0);
+  return ddLimit > 0 ? ddLimit - Math.abs(rawDD) : rawDD;
+}
+
 function buildPortfolioInsights(clients, allClients = []) {
   const insights = [];
   const today = todayIsoDate();
@@ -3027,13 +3033,6 @@ function buildPortfolioInsights(clients, allClients = []) {
     const snapshots = latest?.snapshots || [];
     const imports = client.dailyImports || [];
     const registryCi = mergeRegistryCi(latest?.accounts, client.accountRegistry);
-
-    // Helper: compute remaining buffer from a snapshot + meta
-    function remainingBuffer(s, m) {
-      const ddLimit = Number(m?.maxDrawdownLimit || 0);
-      const rawDD = Number(s?.trailingMaxDrawdown || 0);
-      return ddLimit > 0 ? ddLimit - Math.abs(rawDD) : rawDD;
-    }
 
     // 1. Drawdown velocity — project breach date from last 7-day buffer consumption
     for (const snap of snapshots) {
