@@ -370,7 +370,7 @@ function buildClientOverview(client, dailyImport) {
   };
 }
 
-function buildLifetimeStats(client) {
+export function buildLifetimeStats(client) {
   const imports = client.dailyImports || [];
   if (!imports.length) return null;
   const dailyPnls = imports.map(di =>
@@ -409,7 +409,7 @@ function buildLifetimeStats(client) {
   };
 }
 
-function buildMonthlyTotals(client) {
+export function buildMonthlyTotals(client) {
   const byMonth = {};
   for (const di of client.dailyImports || []) {
     if (!di.date) continue;
