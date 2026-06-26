@@ -100,7 +100,7 @@ function ciMeta(regByLower, accountName) {
   return regByLower[(accountName || '').toLowerCase()] || {};
 }
 
-function deriveClientBadge(client) {
+export function deriveClientBadge(client) {
   const latest = (client.dailyImports || []).at(-1);
   if (!latest) return { label: 'No data', tone: 'muted' };
   const critical = (latest.flags || []).filter((flag) => flag.severity === 'Critical' && flag.status !== 'Resolved' && flag.status !== 'Acknowledged').length;
