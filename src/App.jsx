@@ -2983,7 +2983,7 @@ function searchClients(clients, query) {
   return results;
 }
 
-function buildTodayBriefing(clients) {
+export function buildTodayBriefing(clients) {
   const today = todayIsoDate();
   return clients.map((client) => {
     const todayImport = getClientImportByDate(client, today);
@@ -3223,7 +3223,7 @@ function InsightFeedPanel({ insights, onSelectClient }) {
   );
 }
 
-function buildIncomeProjection(clients = []) {
+export function buildIncomeProjection(clients = []) {
   const rows = [];
   for (const client of clients) {
     const latest = client.dailyImports?.at(-1);
