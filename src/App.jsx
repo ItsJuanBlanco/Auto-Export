@@ -1367,7 +1367,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                         <span className="count">{cards.length}</span>
                       </div>
                       {cards.length === 0 ? <div className="pipeline-empty muted">—</div> : cards.map(({ client, cam, pnl, openTasks, openFlags }) => (
-                        <div key={client.id} className={`pipeline-card${openFlags > 0 ? ' pipeline-card-flag' : ''}`} onClick={() => onOpenCam(cam?.id, client.id)}>
+                        <div key={client.id} role="button" tabIndex={0} className={`pipeline-card${openFlags > 0 ? ' pipeline-card-flag' : ''}`} onClick={() => onOpenCam(cam?.id, client.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenCam(cam?.id, client.id); } }}>
                           <strong>{client.name}</strong>
                           <small className="muted">{cam?.name || 'Unassigned'}</small>
                           <div className="pipeline-card-chips">
