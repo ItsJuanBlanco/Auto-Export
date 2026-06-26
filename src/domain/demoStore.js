@@ -469,7 +469,7 @@ export function resolveFlagInImport(state, clientId, importId, flagId, status = 
     ...client,
     dailyImports: (client.dailyImports || []).map((di) =>
       di.id === importId
-        ? { ...di, flags: di.flags.map((f) => f.id === flagId ? { ...f, status, resolvedAt: new Date().toISOString() } : f) }
+        ? { ...di, flags: (di.flags || []).map((f) => f.id === flagId ? { ...f, status, resolvedAt: new Date().toISOString() } : f) }
         : di
     ),
   }));
