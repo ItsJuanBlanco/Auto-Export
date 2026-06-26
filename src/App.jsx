@@ -2079,7 +2079,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                         <td><span className={u.role === USER_ROLES.MANAGER ? 'badge success' : 'badge muted'}>{u.role}</span></td>
                         <td>{u.camProfileId ? camProfiles.find((p) => p.id === u.camProfileId)?.name || u.camProfileId : '—'}</td>
                         <td>{isEditing
-                          ? <input style={{width:130}} type="text" value={editUserPatch.password ?? ''} onChange={e => setEditUserPatch(p => ({...p, password: e.target.value}))} placeholder="New password" />
+                          ? <input style={{width:130}} type="password" value={editUserPatch.password ?? ''} onChange={e => setEditUserPatch(p => ({...p, password: e.target.value}))} placeholder="New password" autoComplete="new-password" />
                           : <span className="muted">••••••</span>}
                         </td>
                         <td style={{display:'flex',gap:4}}>
@@ -2107,7 +2107,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
               <input required placeholder="Display name *" value={newUser.displayName} onChange={(e) => setNewUser((v) => ({ ...v, displayName: e.target.value }))} />
               <input required placeholder="Username *" value={newUser.username} onChange={(e) => setNewUser((v) => ({ ...v, username: e.target.value }))} />
               <input type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser((v) => ({ ...v, email: e.target.value }))} />
-              <input required placeholder="Password *" value={newUser.password} onChange={(e) => setNewUser((v) => ({ ...v, password: e.target.value }))} />
+              <input required type="password" placeholder="Password *" value={newUser.password} autoComplete="new-password" onChange={(e) => setNewUser((v) => ({ ...v, password: e.target.value }))} />
               <select value={newUser.role} onChange={(e) => setNewUser((v) => ({ ...v, role: e.target.value }))}>
                 {Object.values(USER_ROLES).map((r) => <option key={r}>{r}</option>)}
               </select>
