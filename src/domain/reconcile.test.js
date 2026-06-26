@@ -171,4 +171,61 @@ describe('reconcileDailyImport', () => {
     const result = reconcileDailyImport({ clientId: 'new-client', date: '2026-06-25', registry: undefined, parsed });
     expect(result.snapshots).toHaveLength(1);
   });
+
+  it('raises Critical Drawdown breached flag when model-1 limit is exceeded', () => {
+    const registry = {
+      APEX1234: { accountName: 'APEX1234', accountType: 'Funded', status: 'Active', maxDrawdownLimit: 2000 },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'APEX1234', connection: 'Lucid', grossRealizedPnl: -2500, accountBalance: 47500, trailingMaxDrawdown: -2500, weeklyPnl: -2500 }],
+      strategies: [{ accountName: 'APEX1234', strategyName: '0 - RBO-1.8', strategyFamily: 'RBO', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c1', date: '2026-06-25', registry, parsed });
+    const breachFlags = result.flags.filter(f => f.type === 'Drawdown breached');
+    expect(breachFlags).toHaveLength(1);
+    expect(breachFlags[0].severity).toBe('Critical');
+  });
+
+  it('raises payout eligible flag when funded balance reaches target and payout not requested', () => {
+    const registry = {
+      MFF123: { accountName: 'MFF123', accountType: 'Funded', status: 'Active', targetProfit: 53000, payoutState: 'Not requested' },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'MFF123', connection: 'Lucid', grossRealizedPnl: 3200, accountBalance: 53200, trailingMaxDrawdown: 500, weeklyPnl: 3200 }],
+      strategies: [{ accountName: 'MFF123', strategyName: '0 - RBO-1.8', strategyFamily: 'RBO', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c2', date: '2026-06-25', registry, parsed });
+    const payoutFlags = result.flags.filter(f => f.type === 'Payout eligible');
+    expect(payoutFlags).toHaveLength(1);
+  });
+
+  it('does not raise payout eligible flag when payout is already requested', () => {
+    const registry = {
+      MFF123: { accountName: 'MFF123', accountType: 'Funded', status: 'Active', targetProfit: 53000, payoutState: 'Payout requested' },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'MFF123', connection: 'Lucid', grossRealizedPnl: 3200, accountBalance: 53200, trailingMaxDrawdown: 500, weeklyPnl: 3200 }],
+      strategies: [{ accountName: 'MFF123', strategyName: '0 - RBO-1.8', strategyFamily: 'RBO', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c3', date: '2026-06-25', registry, parsed });
+    expect(result.flags.filter(f => f.type === 'Payout eligible')).toHaveLength(0);
+  });
+
+  it('raises Critical Expected strategy missing for active funded account with no enabled strategy', () => {
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active' },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'ACC1', connection: 'Lucid', grossRealizedPnl: 0, accountBalance: 50000, weeklyPnl: 0 }],
+      strategies: [{ accountName: 'ACC1', strategyName: '0 - RBO-1.8', strategyFamily: 'RBO', enabled: false }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c4', date: '2026-06-25', registry, parsed });
+    const missing = result.flags.filter(f => f.type === 'Expected strategy missing');
+    expect(missing).toHaveLength(1);
+    expect(missing[0].severity).toBe('Critical');
+  });
 });
