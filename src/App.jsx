@@ -102,9 +102,9 @@ function ciMeta(regByLower, accountName) {
 function deriveClientBadge(client) {
   const latest = client.dailyImports.at(-1);
   if (!latest) return { label: 'No data', tone: 'muted' };
-  const critical = latest.flags.filter((flag) => flag.severity === 'Critical' && flag.status !== 'Resolved').length;
+  const critical = (latest.flags || []).filter((flag) => flag.severity === 'Critical' && flag.status !== 'Resolved').length;
   if (critical) return { label: `${critical} critical`, tone: 'danger' };
-  const open = latest.flags.filter((f) => f.status !== 'Resolved' && f.status !== 'Acknowledged').length;
+  const open = (latest.flags || []).filter((f) => f.status !== 'Resolved' && f.status !== 'Acknowledged').length;
   if (open) return { label: `${open} flags`, tone: 'warning' };
   const today = todayIsoDate();
   const overdue = (client.tasks || []).filter((t) => !t.done && t.dueDate && t.dueDate < today).length;
@@ -5047,7 +5047,7 @@ export default function App() {
                       ? <span className={`client-stage-badge stage-${(selectedClient.profile.stage || '').toLowerCase().replace(' ', '-')}`}>{selectedClient.profile.stage}</span>
                       : null}
                   </h1>
-                  <p>{dailyImport ? `${dailyImport.status} · ${dailyImport.flags.length} flags` : 'No close loaded for this date'}</p>
+                  <p>{dailyImport ? `${dailyImport.status} · ${(dailyImport.flags || []).length} flags` : 'No close loaded for this date'}</p>
                 </div>
                 <div className="header-actions">
                   <div className="date-nav">
