@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildConsistencyWarnings, buildDisconnectAlerts, buildPayoutAlerts } from './App';
+import { buildConsistencyWarnings, buildDisconnectAlerts, buildPayoutAlerts, buildTodayActions, buildPnlVarianceAnalysis } from './App';
 
 // ── buildConsistencyWarnings ──────────────────────────────────────────────────
 
@@ -223,5 +223,133 @@ describe('buildDisconnectAlerts', () => {
 
   it('returns empty for client with no imports', () => {
     expect(buildDisconnectAlerts({ dailyImports: [] })).toHaveLength(0);
+  });
+});
+
+// ── buildTodayActions ─────────────────────────────────────────────────────────
+
+describe('buildTodayActions', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-06-25T12:00:00')); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('adds critical action for overdue task', () => {
+    const client = { tasks: [{ id: 't1', text: 'Call client', done: false, dueDate: '2026-06-20' }] };
+    const actions = buildTodayActions(client, null);
+    const overdue = actions.filter(a => a.severity === 'critical' && a.text.startsWith('Overdue'));
+    expect(overdue).toHaveLength(1);
+  });
+
+  it('adds warning action for task due today', () => {
+    const client = { tasks: [{ id: 't1', text: 'Send report', done: false, dueDate: '2026-06-25' }] };
+    const actions = buildTodayActions(client, null);
+    const dueToday = actions.filter(a => a.severity === 'warning' && a.text.startsWith('Due today'));
+    expect(dueToday).toHaveLength(1);
+  });
+
+  it('does not include done tasks', () => {
+    const client = { tasks: [{ id: 't1', text: 'Done task', done: true, dueDate: '2026-06-20' }] };
+    const actions = buildTodayActions(client, null);
+    expect(actions.filter(a => a.text.includes('Done task'))).toHaveLength(0);
+  });
+
+  it('adds critical action for unresolved critical flag', () => {
+    const di = { snapshots: [], accounts: {}, flags: [{ id: 'f1', severity: 'Critical', status: 'Open', message: 'Drawdown breached' }] };
+    const actions = buildTodayActions({ tasks: [], accountRegistry: {} }, di);
+    const flagActions = actions.filter(a => a.text.startsWith('Flag:'));
+    expect(flagActions).toHaveLength(1);
+    expect(flagActions[0].severity).toBe('critical');
+  });
+
+  it('excludes acknowledged critical flags from banner', () => {
+    const di = { snapshots: [], accounts: {}, flags: [{ id: 'f1', severity: 'Critical', status: 'Acknowledged', message: 'X' }] };
+    const actions = buildTodayActions({ tasks: [], accountRegistry: {} }, di);
+    expect(actions.filter(a => a.text.startsWith('Flag:'))).toHaveLength(0);
+  });
+
+  it('adds warning when no daily import provided', () => {
+    const actions = buildTodayActions({ tasks: [] }, null);
+    expect(actions.some(a => a.text.includes('No daily close uploaded'))).toBe(true);
+  });
+
+  it('caps overdue tasks at 3 and due-today at 2', () => {
+    const tasks = [
+      { id: '1', text: 'A', done: false, dueDate: '2026-06-10' },
+      { id: '2', text: 'B', done: false, dueDate: '2026-06-11' },
+      { id: '3', text: 'C', done: false, dueDate: '2026-06-12' },
+      { id: '4', text: 'D', done: false, dueDate: '2026-06-13' },
+      { id: '5', text: 'E', done: false, dueDate: '2026-06-25' },
+      { id: '6', text: 'F', done: false, dueDate: '2026-06-25' },
+      { id: '7', text: 'G', done: false, dueDate: '2026-06-25' },
+    ];
+    const actions = buildTodayActions({ tasks }, null);
+    expect(actions.filter(a => a.text.startsWith('Overdue'))).toHaveLength(3);
+    expect(actions.filter(a => a.text.startsWith('Due today'))).toHaveLength(2);
+  });
+});
+
+// ── buildPnlVarianceAnalysis ──────────────────────────────────────────────────
+
+function makeVarianceClient(accountName, dailyPnls, stratName = 'RBO') {
+  return {
+    accountRegistry: {
+      [accountName]: { accountName, accountType: 'Funded', status: 'Active' },
+    },
+    dailyImports: dailyPnls.map((pnl, i) => ({
+      date: `2026-06-${String(i + 1).padStart(2, '0')}`,
+      snapshots: [{
+        accountName,
+        grossRealizedPnl: pnl,
+        strategies: [{ strategyFamily: stratName, enabled: true, realized: pnl }],
+      }],
+    })),
+  };
+}
+
+describe('buildPnlVarianceAnalysis', () => {
+  it('returns empty when client is null', () => {
+    expect(buildPnlVarianceAnalysis(null, [])).toHaveLength(0);
+  });
+
+  it('filters out accounts with fewer than 2 days of data', () => {
+    const client = makeVarianceClient('ACC1', [300]);
+    expect(buildPnlVarianceAnalysis(client, [client])).toHaveLength(0);
+  });
+
+  it('marks status good when actual exceeds cross-client avg by ≥10%', () => {
+    // Same client is all clients → avg = actual → variancePct = 0 → average
+    // To get good: need actual > expected by 10%
+    // Use two clients: cross-avg from peer = 100/day, focal client = 130/day
+    const peer = makeVarianceClient('B1', [100, 100, 100]);
+    const focal = makeVarianceClient('A1', [130, 130, 130]);
+    const results = buildPnlVarianceAnalysis(focal, [focal, peer]);
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe('good');
+  });
+
+  it('marks status review when actual is ≥15% below cross-client avg', () => {
+    const peer = makeVarianceClient('B1', [300, 300, 300]);
+    const focal = makeVarianceClient('A1', [200, 200, 200]); // ~33% below
+    const results = buildPnlVarianceAnalysis(focal, [focal, peer]);
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe('review');
+  });
+
+  it('sorts results by variancePct descending', () => {
+    const peer = makeVarianceClient('B1', [200, 200, 200]);
+    const focal = {
+      accountRegistry: {
+        ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active' },
+        ACC2: { accountName: 'ACC2', accountType: 'Funded', status: 'Active' },
+      },
+      dailyImports: [1, 2, 3].map((i) => ({
+        date: `2026-06-0${i}`,
+        snapshots: [
+          { accountName: 'ACC1', grossRealizedPnl: 250, strategies: [{ strategyFamily: 'RBO', enabled: true, realized: 250 }] },
+          { accountName: 'ACC2', grossRealizedPnl: 150, strategies: [{ strategyFamily: 'RBO', enabled: true, realized: 150 }] },
+        ],
+      })),
+    };
+    const results = buildPnlVarianceAnalysis(focal, [focal, peer]);
+    expect(results[0].variancePct).toBeGreaterThanOrEqual(results[1].variancePct);
   });
 });

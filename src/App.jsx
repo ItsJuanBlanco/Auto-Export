@@ -124,7 +124,7 @@ function lastContactDaysAgo(client) {
   return Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 86400000);
 }
 
-function buildTodayActions(client, dailyImport) {
+export function buildTodayActions(client, dailyImport) {
   const today = todayIsoDate();
   const actions = [];
 
@@ -588,7 +588,7 @@ function buildMonthlyByAccount(client) {
 
 // P&L variance analysis: compare each account to the team average for same strategy
 // Returns per-account deviation status (good / average / needs attention)
-function buildPnlVarianceAnalysis(client, allClients = []) {
+export function buildPnlVarianceAnalysis(client, allClients = []) {
   if (!client) return [];
 
   // Build cross-client strategy averages from last 7 closes
