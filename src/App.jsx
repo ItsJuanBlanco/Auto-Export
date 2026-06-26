@@ -3955,6 +3955,7 @@ function ActivityLog({ client, onAddEntry, onDeleteEntry }) {
           value={text}
           placeholder="What happened? (call outcome, action taken, client feedback...)"
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submit(e); } }}
           rows={3}
         />
       </form>
