@@ -238,7 +238,7 @@ function latestImports(clients = []) {
   }));
 }
 
-function buildManagerSummary(clients = []) {
+export function buildManagerSummary(clients = []) {
   const imports = latestImports(clients);
   const snapshots = imports.flatMap(({ dailyImport }) => dailyImport?.snapshots || []);
   const openFlags = imports.flatMap(({ dailyImport }) => (dailyImport?.flags || []).filter(f => f.status !== 'Resolved' && f.status !== 'Acknowledged'));
@@ -256,7 +256,7 @@ function buildManagerSummary(clients = []) {
   };
 }
 
-function buildTeamHistory(clients = []) {
+export function buildTeamHistory(clients = []) {
   const byDate = new Map();
   for (const client of clients) {
     for (const dailyImport of client.dailyImports || []) {
