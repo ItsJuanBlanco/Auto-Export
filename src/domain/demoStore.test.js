@@ -92,4 +92,23 @@ describe('demoStore', () => {
     expect(Object.keys(reg).length).toBe(1);
     expect(Object.values(reg)[0].alias).toBe('Updated');
   });
+
+  it('upsertAccountMeta coerces string numeric fields to numbers on save', () => {
+    let state = addClient(emptyState(), 'Test Trader');
+    const clientId = state.clients[0].id;
+    // Simulate HTML input saving strings (event.target.value always returns string)
+    const next = upsertAccountMeta(state, clientId, 'ACC1', {
+      accountType: 'Funded',
+      targetProfit: '52000',
+      maxDrawdownLimit: '2500',
+      startBalance: '50000',
+    });
+    const reg = next.clients[0].accountRegistry.ACC1;
+    expect(typeof reg.targetProfit).toBe('number');
+    expect(typeof reg.maxDrawdownLimit).toBe('number');
+    expect(typeof reg.startBalance).toBe('number');
+    expect(reg.targetProfit).toBe(52000);
+    expect(reg.maxDrawdownLimit).toBe(2500);
+    expect(reg.startBalance).toBe(50000);
+  });
 });
