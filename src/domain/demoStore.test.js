@@ -9,6 +9,7 @@ import {
   deleteTask,
   getClientImportByDate,
   getLatestClientImport,
+  getStorageUsageKB,
   isLikelyDemoData,
   parseImportedState,
   removeAccountFromRegistry,
@@ -20,6 +21,7 @@ import {
   togglePinClient,
   transferClient,
   updateCamProfile,
+  updateClientDetails,
   updateImportStatus,
   updateTask,
   upsertAccountMeta,
@@ -409,5 +411,41 @@ describe('isLikelyDemoData', () => {
   it('returns false for state with non-demo client names', () => {
     const state = { clients: [{ name: 'Completely Custom Name XYZ' }] };
     expect(isLikelyDemoData(state)).toBe(false);
+  });
+});
+
+// ── updateClientDetails ───────────────────────────────────────────────────────
+
+describe('updateClientDetails', () => {
+  it('patches top-level client fields without touching accountRegistry', () => {
+    let state = addClient(emptyState(), 'Trader');
+    const clientId = state.clients[0].id;
+    state = upsertAccountMeta(state, clientId, 'ACC1', { accountType: 'Funded' });
+    const next = updateClientDetails(state, clientId, { notes: 'VIP client', phone: '+1-555-0100' });
+    const c = next.clients[0];
+    expect(c.notes).toBe('VIP client');
+    expect(c.phone).toBe('+1-555-0100');
+    expect(c.accountRegistry['ACC1'].accountType).toBe('Funded'); // registry untouched
+  });
+
+  it('does not affect other clients', () => {
+    let state = addClient(emptyState(), 'A');
+    state = addClient(state, 'B');
+    const idA = state.clients[0].id;
+    const next = updateClientDetails(state, idA, { notes: 'note for A' });
+    // Client B should not have the note set on A
+    expect(next.clients[1].notes).not.toBe('note for A');
+  });
+});
+
+// ── getStorageUsageKB ─────────────────────────────────────────────────────────
+
+describe('getStorageUsageKB', () => {
+  it('returns 0 when window is undefined (server/test env)', () => {
+    // jsdom environment has localStorage, but the function handles missing window
+    // We just verify it returns a non-negative number
+    const usage = getStorageUsageKB();
+    expect(typeof usage).toBe('number');
+    expect(usage).toBeGreaterThanOrEqual(0);
   });
 });

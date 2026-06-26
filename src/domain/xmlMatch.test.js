@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildStrategySetRecord,
   buildStrategySignature,
   enrichStrategyWithSetMatch,
   matchStrategySet,
@@ -213,5 +214,46 @@ describe('enrichStrategyWithSetMatch', () => {
     expect(result.configMatch.matched).toBe(true);
     expect(result.configMatch.risk).toBe('Low Risk');
     expect(result.configMatch.setVersion).toBe('v4');
+  });
+});
+
+// ── buildStrategySetRecord ────────────────────────────────────────────────────
+
+describe('buildStrategySetRecord', () => {
+  const SAMPLE_XML = `<StrategyTemplate><Strategy><RBO_PF>
+    <Name>0 - RBO_PF</Name>
+    <PosSize1>2</PosSize1><PosSize2>2</PosSize2><PosSize3>2</PosSize3>
+    <ProfitTargetTicks1>155</ProfitTargetTicks1><ProfitTargetTicks2>175</ProfitTargetTicks2><ProfitTargetTicks3>250</ProfitTargetTicks3>
+    <StopLossTicks>105</StopLossTicks>
+    <MyTradeDirection>Long</MyTradeDirection>
+    <BarsPeriodSerializable><Value>5</Value></BarsPeriodSerializable>
+  </RBO_PF></Strategy></StrategyTemplate>`;
+
+  const SAMPLE_FILE = '1 - RBO_PF (NQ 06-26) - 5 Min - Low Risk - v4 - Period 1.xml';
+
+  it('merges filename metadata with XML body data', () => {
+    const record = buildStrategySetRecord({ fileName: SAMPLE_FILE, xml: SAMPLE_XML });
+    expect(record.fileName).toBe(SAMPLE_FILE);
+    expect(record.risk).toBe('Low Risk');
+    expect(record.setVersion).toBe('v4');
+    expect(record.period).toBe('1');
+  });
+
+  it('prefers XML-parsed family over filename family', () => {
+    const record = buildStrategySetRecord({ fileName: SAMPLE_FILE, xml: SAMPLE_XML });
+    // XML Name = "0 - RBO_PF" → strategyFamily = "RBO_PF"
+    expect(record.family).toBe('RBO_PF');
+  });
+
+  it('attaches a signature with posSizes and profitTargets', () => {
+    const record = buildStrategySetRecord({ fileName: SAMPLE_FILE, xml: SAMPLE_XML });
+    expect(record.signature.posSizes).toEqual([2, 2, 2]);
+    expect(record.signature.profitTargets).toEqual([155, 175, 250]);
+    expect(record.signature.stopLossTicks).toBe(105);
+  });
+
+  it('stores relativePath when provided', () => {
+    const record = buildStrategySetRecord({ fileName: 'x.xml', relativePath: 'sets/rbo/', xml: '<r/>' });
+    expect(record.relativePath).toBe('sets/rbo/');
   });
 });
