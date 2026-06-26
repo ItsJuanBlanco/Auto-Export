@@ -4579,6 +4579,17 @@ export default function App() {
   const currentCamClients = clientsForCam(state.clients, currentCamProfile);
   const showDemoBanner = isLikelyDemoData(state);
   const selectedClient = currentCamClients.find((client) => client.id === state.selectedClientId) || currentCamClients[0] || null;
+
+  // Auto-navigate to most recent import date when selected client has no import for selectedDate
+  useEffect(() => {
+    if (!selectedClient) return;
+    const hasToday = getClientImportByDate(selectedClient, selectedDate);
+    if (!hasToday) {
+      const latest = selectedClient.dailyImports?.at(-1);
+      if (latest?.date) setSelectedDate(latest.date);
+    }
+  }, [selectedClient?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const dailyImport = selectedClient ? getClientImportByDate(selectedClient, selectedDate) : null;
   const visibleTabs = selectedClient ? buildVisibleTabs(selectedClient, dailyImport) : STATIC_TABS;
   const todayActions = useMemo(() => selectedClient ? buildTodayActions(selectedClient, dailyImport) : [], [selectedClient, dailyImport]);
