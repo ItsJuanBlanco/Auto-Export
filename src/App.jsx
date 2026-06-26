@@ -843,7 +843,7 @@ export function buildPayoutAlerts(client, dailyImport) {
   return alerts.sort((a, b) => b.pct - a.pct);
 }
 
-function buildPayoutPipeline(clients = [], camProfiles = []) {
+export function buildPayoutPipeline(clients = [], camProfiles = []) {
   const camById = Object.fromEntries(camProfiles.map((p) => [p.id, p]));
   const clientCam = {};
   for (const cam of camProfiles) {
@@ -947,7 +947,7 @@ function LoginScreen({ onLogin, users }) {
   );
 }
 
-function buildCamPerformance(clients = [], camProfiles = []) {
+export function buildCamPerformance(clients = [], camProfiles = []) {
   const clientCam = {};
   for (const cam of camProfiles) {
     for (const id of cam.clientIds || []) clientCam[id] = cam.id;
