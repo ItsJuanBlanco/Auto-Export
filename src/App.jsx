@@ -1875,10 +1875,12 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                             value={cam?.id || ''}
                             style={{fontSize:12,padding:'2px 6px'}}
                             onChange={e => {
-                              if (!e.target.value || e.target.value === cam?.id) return;
-                              const targetCam = camProfiles.find(p => p.id === e.target.value);
-                              if (window.confirm(`Move ${client.name} → ${targetCam?.name}?`)) {
-                                onTransferClient(client.id, e.target.value);
+                              const newCamId = e.target.value;
+                              if (newCamId === (cam?.id || '')) return;
+                              const targetCam = camProfiles.find(p => p.id === newCamId);
+                              const label = targetCam ? targetCam.name : 'Unassigned';
+                              if (window.confirm(`Move ${client.name} → ${label}?`)) {
+                                onTransferClient(client.id, newCamId);
                               } else {
                                 e.target.value = cam?.id || '';
                               }
