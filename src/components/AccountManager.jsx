@@ -67,6 +67,7 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount, o
             {!isCash ? <th>Pass</th> : null}
             {!isCash ? <th>Direction</th> : null}
             {!isCash ? <th>Payout</th> : null}
+            {!isCash ? <th>Start Bal $</th> : null}
             {!isCash ? <th>Target $</th> : null}
             {!isCash ? <th>Max DD $</th> : null}
             {!isCash ? <th>Date Added</th> : null}
@@ -137,6 +138,18 @@ export default function AccountManager({ accounts, snapshots, onUpdateAccount, o
                     >
                       {PAYOUT_OPTIONS.map((option) => <option key={option}>{option}</option>)}
                     </select>
+                  )}
+                </td>
+              ) : null}
+              {!isCash ? (
+                <td>
+                  {account.accountType === ACCOUNT_TYPES.CASH ? <span className="field-na">N/A</span> : (
+                    <input
+                      type="number"
+                      value={account.startBalance ?? ''}
+                      placeholder="e.g. 50000"
+                      onChange={(event) => onUpdateAccount(account.accountName, { startBalance: event.target.value })}
+                    />
                   )}
                 </td>
               ) : null}

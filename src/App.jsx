@@ -330,7 +330,7 @@ function buildClientOverview(client, dailyImport) {
     .map((snapshot) => {
       const meta = ciMeta(registry, snapshot.accountName);
       if (meta.accountType === 'Cash' || meta.accountType === 'Inactive / Ignore') return null;
-      const startingBalance = Number(snapshot.accountBalance || 0) >= 90000 ? 100000 : 50000;
+      const startingBalance = Number(meta.startBalance || 0) || (Number(snapshot.accountBalance || 0) >= 90000 ? 100000 : 50000);
       const target = Number(meta.targetProfit || 0) || startingBalance + (meta.accountType === 'Funded' ? 2000 : 3000);
       const progress = Math.max(0, Math.min(100, ((Number(snapshot.accountBalance || 0) - startingBalance) / (target - startingBalance || 1)) * 100));
       return {
