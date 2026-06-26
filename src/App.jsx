@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useRef, useState } from 'react';
+import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -1108,14 +1108,14 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
     flags: acc.flags + cam.flags,
   }), { clients: 0, accounts: 0, weeklyPnl: 0, dailyPnl: 0, flags: 0 });
 
-  const strategies = buildStrategyAnalyzer(clients);
-  const strategyEffectiveness = buildStrategyEffectiveness(clients);
-  const lifecycle = buildLifecycleMetrics(clients);
-  const riskDist = buildRiskDistribution(clients, camProfiles);
-  const camPerf = buildCamPerformance(clients, camProfiles);
-  const managerInsights = buildPortfolioInsights(clients, clients);
-  const allFunded = buildAllFundedAccounts(clients, camProfiles);
-  const allEvals = (() => {
+  const strategies = useMemo(() => buildStrategyAnalyzer(clients), [clients]);
+  const strategyEffectiveness = useMemo(() => buildStrategyEffectiveness(clients), [clients]);
+  const lifecycle = useMemo(() => buildLifecycleMetrics(clients), [clients]);
+  const riskDist = useMemo(() => buildRiskDistribution(clients, camProfiles), [clients, camProfiles]);
+  const camPerf = useMemo(() => buildCamPerformance(clients, camProfiles), [clients, camProfiles]);
+  const managerInsights = useMemo(() => buildPortfolioInsights(clients, clients), [clients]);
+  const allFunded = useMemo(() => buildAllFundedAccounts(clients, camProfiles), [clients, camProfiles]);
+  const allEvals = useMemo(() => {
     const rows = [];
     for (const client of clients) {
       const cam = camProfiles.find(p => (p.clientIds || []).includes(client.id));
@@ -1133,10 +1133,10 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
       }
     }
     return rows.sort((a, b) => (b.weeklyPnl - a.weeklyPnl));
-  })();
+  }, [clients, camProfiles]);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const monthlyKpis = (() => {
+  const monthlyKpis = useMemo(() => {
     let monthlyPnl = 0, payoutAmount = 0, payoutCount = 0, fundedActive = 0;
     const today = todayIsoDate();
     let closedToday = 0, withUploadToday = 0;
@@ -1161,7 +1161,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
       }
     }
     return { monthlyPnl, payoutAmount, payoutCount, fundedActive, closedToday, withUploadToday };
-  })();
+  }, [clients, currentMonth]);
 
   function submitCam(event) {
     event.preventDefault();
@@ -3282,11 +3282,11 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
   const currentMonth = new Date().toISOString().slice(0, 7);
   const monthlyPnl = clients.reduce((sum, c) => sum + (c.dailyImports || []).filter(di => di.date?.startsWith(currentMonth)).reduce((s, di) => s + (di.snapshots || []).reduce((ss, sn) => ss + Number(sn.grossRealizedPnl || 0), 0), 0), 0);
   const goalPct = monthlyGoal > 0 ? Math.min(100, Math.round((monthlyPnl / monthlyGoal) * 100)) : null;
-  const overview = buildCamOverview(clients, strategySetRecords);
+  const overview = useMemo(() => buildCamOverview(clients, strategySetRecords), [clients, strategySetRecords]);
   const displayName = camName || 'this workspace';
-  const briefing = buildTodayBriefing(clients);
-  const insights = buildPortfolioInsights(clients, allClients);
-  const incomeProjection = buildIncomeProjection(clients);
+  const briefing = useMemo(() => buildTodayBriefing(clients), [clients]);
+  const insights = useMemo(() => buildPortfolioInsights(clients, allClients), [clients, allClients]);
+  const incomeProjection = useMemo(() => buildIncomeProjection(clients), [clients]);
 
   const urgencyCounts = { critical: 0, warning: 0, info: 0, pending: 0, ok: 0 };
   briefing.forEach((b) => { urgencyCounts[b.urgency] = (urgencyCounts[b.urgency] || 0) + 1; });
