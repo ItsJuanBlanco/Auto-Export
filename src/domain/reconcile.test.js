@@ -141,4 +141,22 @@ describe('reconcileDailyImport', () => {
     expect(recalculated.flags.map((flag) => flag.type)).not.toContain('Unassigned account');
     expect(recalculated.status).toBe('Ready to close');
   });
+
+  it('does not raise Missing account when CSV casing differs from registry key casing', () => {
+    // Registry has uppercase key; CSV exports lowercase — must not produce a false "Missing account" flag
+    const registry = {
+      APEX1234: { accountName: 'APEX1234', accountType: 'Funded', status: 'Active', alias: 'My Account' },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'apex1234', connection: 'Live', grossRealizedPnl: 150, accountBalance: 55000, weeklyPnl: 300 }],
+      strategies: [{ accountName: 'apex1234', strategyName: '1 - RBO-1.8', strategyFamily: 'RBO', enabled: true, realized: 150 }],
+      orders: [],
+      executions: [],
+    };
+
+    const result = reconcileDailyImport({ clientId: 'client-ci', date: '2026-06-25', registry, parsed });
+
+    const missingFlags = result.flags.filter((f) => f.type === 'Missing account');
+    expect(missingFlags).toHaveLength(0);
+  });
 });
