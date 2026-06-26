@@ -211,4 +211,26 @@ describe('buildCamOverview', () => {
       expect.objectContaining({ time: '9:45 AM', price: 108, action: 'Sell' }),
     ]);
   });
+
+  it('resolves accountAlias and accountType case-insensitively when registry key casing differs from snapshot', () => {
+    const clients = [
+      makeClient({
+        id: 'client-ci',
+        name: 'CI Test',
+        registry: { APEX1234: { alias: 'My Funded', accountType: 'Funded' } },
+        snapshots: [makeSnapshot({
+          accountName: 'apex1234',
+          weeklyPnl: 300,
+          strategies: [makeStrategy({ realized: 180 })],
+        })],
+      }),
+    ];
+
+    const overview = buildCamOverview(clients);
+
+    expect(overview.algorithms[0].items[0]).toMatchObject({
+      accountAlias: 'My Funded',
+      accountType: 'Funded',
+    });
+  });
 });
