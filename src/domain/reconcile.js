@@ -274,7 +274,7 @@ export function reconcileDailyImport({ clientId, date, registry = {}, parsed }) 
     }
   }
 
-  for (const [accountName, meta] of Object.entries(registry)) {
+  for (const [accountName, meta] of Object.entries(registry || {})) {
     if (seen.has(accountName.toLowerCase())) continue;
     accountsByName[accountName] = meta;
     if (meta.accountType !== ACCOUNT_TYPES.IGNORE && meta.status !== ACCOUNT_STATUSES.INACTIVE) {
