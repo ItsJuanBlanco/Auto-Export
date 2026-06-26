@@ -689,7 +689,7 @@ function accountRiskLevel(snapshot, meta) {
 }
 
 // Detect consistency rule risk: best day > 30% of total positive P&L on a funded account
-function buildConsistencyWarnings(client) {
+export function buildConsistencyWarnings(client) {
   const warnings = [];
   const registry = client?.accountRegistry || {};
   const funded = Object.values(registry).filter((a) => a.accountType === 'Funded' && a.status !== 'Failed' && a.status !== 'Inactive');
@@ -816,7 +816,7 @@ function buildRiskDistribution(clients = [], camProfiles = []) {
 }
 
 // Detect funded accounts that have reached their target profit — payout should be requested
-function buildPayoutAlerts(client, dailyImport) {
+export function buildPayoutAlerts(client, dailyImport) {
   if (!client || !dailyImport) return [];
   const registry = mergeRegistryCi(dailyImport.accounts, client.accountRegistry);
   const alerts = [];
