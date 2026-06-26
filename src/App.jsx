@@ -3511,7 +3511,7 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
             </div>
           </div>
           <div className="briefing-grid">
-            {briefing.map(({ client, criticalFlags, openFlags, openTasks, overdueTasks, highTasks, payoutAccounts, dailyPnl, closeStatus, urgency }) => {
+            {briefing.map(({ client, criticalFlags, openFlags, openTasks, overdueTasks, highTasks, payoutAccounts, dailyPnl, closeStatus, urgency, staleContact, daysSinceContact }) => {
               const nextTask = overdueTasks[0] || highTasks[0] || openTasks[0] || null;
               const nextFlag = criticalFlags[0] || null;
               const isQT = quickTaskClientId === client.id;
