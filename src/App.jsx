@@ -411,6 +411,7 @@ function buildLifetimeStats(client) {
 function buildMonthlyTotals(client) {
   const byMonth = {};
   for (const di of client.dailyImports || []) {
+    if (!di.date) continue;
     const month = di.date.slice(0, 7);
     if (!byMonth[month]) byMonth[month] = { month, monthlyPnl: 0, closedDays: 0, accounts: 0 };
     const snapshots = di.snapshots || [];
@@ -556,6 +557,7 @@ function buildLifecycleMetrics(clients = []) {
 function buildMonthlyByAccount(client) {
   const byMonth = {};
   for (const di of client.dailyImports || []) {
+    if (!di.date) continue;
     const month = di.date.slice(0, 7);
     if (!byMonth[month]) byMonth[month] = {};
     const registry = mergeRegistryCi(di.accounts, client.accountRegistry);
