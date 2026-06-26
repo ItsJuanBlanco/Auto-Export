@@ -1604,7 +1604,7 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
                     if (typeof av === 'string') return dir * av.localeCompare(bv);
                     return dir * (bv - av);
                   }).map((row) => (
-                    <tr key={row.accountName} className={row.bufferPct !== null && row.bufferPct <= 20 ? 'row-highlight' : ''} style={{cursor:'pointer'}} onClick={() => { const cam = camProfiles.find(c => c.clientIds?.includes(row.clientId)); onOpenCam(cam?.id, row.clientId); }}>
+                    <tr key={row.accountName} tabIndex={0} className={row.bufferPct !== null && row.bufferPct <= 20 ? 'row-highlight' : ''} style={{cursor:'pointer'}} onClick={() => { const cam = camProfiles.find(c => c.clientIds?.includes(row.clientId)); onOpenCam(cam?.id, row.clientId); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const cam = camProfiles.find(c => c.clientIds?.includes(row.clientId)); onOpenCam(cam?.id, row.clientId); } }}>
                       <td><strong>{row.alias}</strong><small>{row.connection}</small></td>
                       <td>{row.clientName}</td>
                       <td><small>{row.camName}</small></td>
