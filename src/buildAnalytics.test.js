@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildConsistencyWarnings, buildPayoutAlerts } from './App';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildConsistencyWarnings, buildDisconnectAlerts, buildPayoutAlerts } from './App';
 
 // ── buildConsistencyWarnings ──────────────────────────────────────────────────
 
@@ -138,5 +138,90 @@ describe('buildPayoutAlerts', () => {
     const alerts = buildPayoutAlerts(client, di);
     expect(alerts[0].accountName).toBe('ACC2');
     expect(alerts[1].accountName).toBe('ACC1');
+  });
+});
+
+// ── buildDisconnectAlerts ─────────────────────────────────────────────────────
+
+// Pin clock to a known Thursday so "today" and "prevTrading" are deterministic
+const FAKE_TODAY = '2026-06-25'; // Thursday
+const FAKE_PREV  = '2026-06-24'; // Wednesday (prev trading day)
+
+function makePriorImports(accountName, pnls) {
+  return pnls.map((pnl, i) => ({
+    date: `2026-06-${String(i + 1).padStart(2, '0')}`,
+    snapshots: [{ accountName, grossRealizedPnl: pnl }],
+  }));
+}
+
+function makeDisconnectClient({ importDate = FAKE_TODAY, pnlToday = 0, priorPnls = [200, 300, 250, 180, 220], accountType = 'Funded', status = 'Active' } = {}) {
+  const accountName = 'APEX1';
+  return {
+    accountRegistry: {
+      [accountName]: { accountName, alias: 'Apex Main', accountType, status },
+    },
+    dailyImports: [
+      ...makePriorImports(accountName, priorPnls),
+      {
+        date: importDate,
+        accounts: {},
+        snapshots: [{
+          accountName,
+          grossRealizedPnl: pnlToday,
+          strategies: [{ strategyFamily: 'RBO', enabled: true }],
+        }],
+      },
+    ],
+  };
+}
+
+describe('buildDisconnectAlerts', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(`${FAKE_TODAY}T12:00:00`)); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('fires alert when active strategies + $0 P&L + strong prior avg', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient());
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].accountName).toBe('APEX1');
+    expect(alerts[0].message).toContain('Verify VPS');
+  });
+
+  it('fires alert when import is from prev trading day', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient({ importDate: FAKE_PREV }));
+    expect(alerts).toHaveLength(1);
+  });
+
+  it('no alert when import is older than prev trading day', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient({ importDate: '2026-06-20' }));
+    expect(alerts).toHaveLength(0);
+  });
+
+  it('no alert when today P&L is non-zero', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient({ pnlToday: 150 }));
+    expect(alerts).toHaveLength(0);
+  });
+
+  it('no alert when prior avg is ≤ $50 (not historically active)', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient({ priorPnls: [30, 20, 40, 10, 50] }));
+    expect(alerts).toHaveLength(0);
+  });
+
+  it('no alert when fewer than 3 prior data points', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient({ priorPnls: [300, 400] }));
+    expect(alerts).toHaveLength(0);
+  });
+
+  it('no alert for Inactive / Ignore account type', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient({ accountType: 'Inactive / Ignore' }));
+    expect(alerts).toHaveLength(0);
+  });
+
+  it('no alert for Failed account status', () => {
+    const alerts = buildDisconnectAlerts(makeDisconnectClient({ status: 'Failed' }));
+    expect(alerts).toHaveLength(0);
+  });
+
+  it('returns empty for client with no imports', () => {
+    expect(buildDisconnectAlerts({ dailyImports: [] })).toHaveLength(0);
   });
 });

@@ -726,7 +726,7 @@ export function buildConsistencyWarnings(client) {
 }
 
 // Detect possible VPS/algo disconnect: enabled strategy + zero P&L when prior avg was positive
-function buildDisconnectAlerts(client) {
+export function buildDisconnectAlerts(client) {
   const alerts = [];
   const latest = client.dailyImports?.at(-1);
   if (!latest) return alerts;
