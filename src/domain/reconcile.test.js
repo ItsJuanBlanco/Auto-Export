@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recalculateDailyImport, reconcileDailyImport } from './reconcile';
+import { makeAccountAlias, recalculateDailyImport, reconcileDailyImport } from './reconcile';
 
 describe('reconcileDailyImport', () => {
   it('preserves existing manual classification and flags only new accounts', () => {
@@ -320,5 +320,57 @@ describe('reconcileDailyImport', () => {
     };
     const result = reconcileDailyImport({ clientId: 'c11', date: '2026-06-25', registry, parsed });
     expect(result.flags).toContainEqual(expect.objectContaining({ type: 'Drawdown near limit', severity: 'Critical' }));
+  });
+});
+
+// ── makeAccountAlias ──────────────────────────────────────────────────────────
+
+describe('makeAccountAlias', () => {
+  it('uses last 4 chars of accountName with connection label', () => {
+    expect(makeAccountAlias('APEX-12345678', 'Lucid')).toBe('Lucid - 5678');
+  });
+
+  it('falls back to Account label when connection is empty', () => {
+    expect(makeAccountAlias('APEX-12345678', '')).toBe('Account - 5678');
+  });
+
+  it('returns connection label alone when accountName is too short to have a suffix', () => {
+    expect(makeAccountAlias('AB', 'Lucid')).toBe('Lucid - AB');
+  });
+
+  it('handles null/undefined gracefully', () => {
+    const alias = makeAccountAlias(null, null);
+    expect(typeof alias).toBe('string');
+  });
+});
+
+// ── recalculateDailyImport ────────────────────────────────────────────────────
+
+describe('recalculateDailyImport', () => {
+  it('rebuilds flags from existing snapshot data using the current registry', () => {
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active', maxDrawdownLimit: 2000, targetProfit: 52000, payoutState: 'Not requested' },
+    };
+    const dailyImport = {
+      id: 'di-1', clientId: 'c1', date: '2026-06-25', status: 'Closed',
+      snapshots: [{ accountName: 'ACC1', grossRealizedPnl: 200, accountBalance: 51200, trailingMaxDrawdown: -1900, weeklyPnl: 800 }],
+      strategies: [{ accountName: 'ACC1', strategyName: '1-RBO', enabled: true }],
+      orders: [], executions: [], accounts: {},
+      flags: [], // start with no flags — recalculate should generate them
+    };
+    const result = recalculateDailyImport({ dailyImport, registry });
+    // drawdown used = 1900 / 2000 = 95% → Critical
+    expect(result.flags).toContainEqual(expect.objectContaining({ type: 'Drawdown near limit', severity: 'Critical' }));
+  });
+
+  it('preserves non-flag fields from the original import', () => {
+    const dailyImport = {
+      id: 'di-custom', clientId: 'c1', date: '2026-06-25', status: 'Closed',
+      snapshots: [], strategies: [], orders: [], executions: [], accounts: {}, flags: [],
+      customField: 'keep-me',
+    };
+    const result = recalculateDailyImport({ dailyImport, registry: {} });
+    expect(result.customField).toBe('keep-me');
+    expect(result.id).toBe('di-custom');
   });
 });
