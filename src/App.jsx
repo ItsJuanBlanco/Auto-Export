@@ -1179,6 +1179,10 @@ function ManagerOverview({ clients, camProfiles = [], onOpenCam, onLoadDemo, onC
   }
 
   function saveUserEdit(userId) {
+    if (editUserPatch.username) {
+      const conflict = (users || []).some(u => u.id !== userId && u.username?.toLowerCase() === editUserPatch.username.toLowerCase());
+      if (conflict) { alert(`Username "${editUserPatch.username}" is already taken.`); return; }
+    }
     onUsersChange(updateUser(users, userId, editUserPatch));
     setEditUserId(null);
     setEditUserPatch({});
