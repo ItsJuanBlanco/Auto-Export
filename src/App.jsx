@@ -455,7 +455,7 @@ function buildStrategyAnalyzer(clients = []) {
 }
 
 // Full historical strategy effectiveness — aggregates across all dailyImports
-function buildStrategyEffectiveness(clients = []) {
+export function buildStrategyEffectiveness(clients = []) {
   // stratName → { totalPnl, days: [{date,pnl}], winDays, lossDays, accountSet, clientSet, last7Pnl }
   const stratMap = new Map();
 
@@ -996,7 +996,7 @@ export function buildCamPerformance(clients = [], camProfiles = []) {
   return Object.values(camMap).sort((a, b) => b.weeklyPnl - a.weeklyPnl);
 }
 
-function buildAllFundedAccounts(clients = [], camProfiles = []) {
+export function buildAllFundedAccounts(clients = [], camProfiles = []) {
   const clientCam = {};
   for (const cam of camProfiles) {
     for (const id of cam.clientIds || []) clientCam[id] = cam.name;
