@@ -519,6 +519,8 @@ export function removeAccountFromRegistry(state, clientId, accountName) {
   });
 }
 
+const NUMERIC_ACCOUNT_FIELDS = ['targetProfit', 'maxDrawdownLimit', 'startBalance', 'payoutCount'];
+
 export function upsertAccountMeta(state, clientId, accountName, patch) {
   return updateClient(state, clientId, (client) => {
     // Case-insensitive key lookup to prevent duplicate registry entries
@@ -527,13 +529,21 @@ export function upsertAccountMeta(state, clientId, accountName, patch) {
     const existing = registry[existingKey] || { accountName };
     const newRegistry = { ...registry };
     if (existingKey !== accountName) delete newRegistry[existingKey];
+    // Coerce numeric fields so stored values are always numbers, not input strings
+    const coerced = { ...patch };
+    for (const field of NUMERIC_ACCOUNT_FIELDS) {
+      if (field in coerced && coerced[field] !== '' && coerced[field] !== null) {
+        const n = Number(coerced[field]);
+        if (!Number.isNaN(n)) coerced[field] = n;
+      }
+    }
     return {
       ...client,
       accountRegistry: {
         ...newRegistry,
         [accountName]: {
           ...existing,
-          ...patch,
+          ...coerced,
           accountName,
         },
       },
