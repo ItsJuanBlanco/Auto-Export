@@ -4558,6 +4558,7 @@ export default function App() {
   const selectedClient = currentCamClients.find((client) => client.id === state.selectedClientId) || currentCamClients[0] || null;
   const dailyImport = selectedClient ? getClientImportByDate(selectedClient, selectedDate) : null;
   const visibleTabs = selectedClient ? buildVisibleTabs(selectedClient, dailyImport) : STATIC_TABS;
+  const todayActions = useMemo(() => selectedClient ? buildTodayActions(selectedClient, dailyImport) : [], [selectedClient, dailyImport]);
 
   const effectiveActiveTab = visibleTabs.includes(activeTab) ? activeTab : visibleTabs[0] || 'Credentials & Notes';
 
@@ -5234,20 +5235,16 @@ export default function App() {
                 );
               })()}
 
-              {(() => {
-                const actions = buildTodayActions(selectedClient, dailyImport);
-                if (!actions.length) return null;
-                return (
-                  <div className="today-banner">
-                    {actions.map((a, i) => (
-                      <div key={i} className={`today-banner-item today-banner-${a.severity}`}>
-                        <span>{a.icon}</span>
-                        <span>{a.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
+              {todayActions.length > 0 && (
+                <div className="today-banner">
+                  {todayActions.map((a, i) => (
+                    <div key={i} className={`today-banner-item today-banner-${a.severity}`}>
+                      <span>{a.icon}</span>
+                      <span>{a.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {(() => {
                 const note = selectedClient.pinnedNote;
