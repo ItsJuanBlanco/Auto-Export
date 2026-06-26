@@ -514,7 +514,7 @@ export function buildStrategyEffectiveness(clients = []) {
   }).sort((a, b) => b.totalPnl - a.totalPnl);
 }
 
-function buildLifecycleMetrics(clients = []) {
+export function buildLifecycleMetrics(clients = []) {
   const evalFails = [];
   const evalFunded = [];
   const fundedPayouts = [];
@@ -555,7 +555,7 @@ function buildLifecycleMetrics(clients = []) {
 }
 
 // Monthly P&L grouped by account — includes active strategy families per account
-function buildMonthlyByAccount(client) {
+export function buildMonthlyByAccount(client) {
   const byMonth = {};
   for (const di of client.dailyImports || []) {
     if (!di.date) continue;
