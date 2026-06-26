@@ -103,7 +103,7 @@ function ciMeta(regByLower, accountName) {
 function deriveClientBadge(client) {
   const latest = (client.dailyImports || []).at(-1);
   if (!latest) return { label: 'No data', tone: 'muted' };
-  const critical = (latest.flags || []).filter((flag) => flag.severity === 'Critical' && flag.status !== 'Resolved').length;
+  const critical = (latest.flags || []).filter((flag) => flag.severity === 'Critical' && flag.status !== 'Resolved' && flag.status !== 'Acknowledged').length;
   if (critical) return { label: `${critical} critical`, tone: 'danger' };
   const open = (latest.flags || []).filter((f) => f.status !== 'Resolved' && f.status !== 'Acknowledged').length;
   if (open) return { label: `${open} flags`, tone: 'warning' };
