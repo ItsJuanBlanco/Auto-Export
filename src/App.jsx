@@ -3264,7 +3264,7 @@ function buildIncomeProjection(clients = []) {
   return rows.sort((a, b) => b.pct - a.pct);
 }
 
-function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask, onCompleteTask, monthlyGoal: monthlyGoalProp = 0, onSetMonthlyGoal }) {
+function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRecords = [], strategySetIndexStatus, camName = '', onSelectClient, onAddClientTask, onLogClientActivity, onCompleteTask, monthlyGoal: monthlyGoalProp = 0, onSetMonthlyGoal }) {
   const [expandedAlgorithm, setExpandedAlgorithm] = useState('');
   const [showBulkTask, setShowBulkTask] = useState(false);
   const [bulkTaskText, setBulkTaskText] = useState('');
@@ -3561,7 +3561,18 @@ function CamOverview({ clients, camProfiles = [], allClients = [], strategySetRe
                       <button type="button" className="ghost-button" onClick={() => { setQuickTaskClientId(null); setQuickTaskText(''); }}>✕</button>
                     </form>
                   ) : (
-                    <button className="ghost-button" style={{fontSize:11,marginTop:4,alignSelf:'flex-start'}} onClick={e => { e.stopPropagation(); setQuickTaskClientId(client.id); setQuickTaskText(''); }}>+ Task</button>
+                    <div style={{display:'flex',gap:4,marginTop:4}} onClick={e => e.stopPropagation()}>
+                      <button className="ghost-button" style={{fontSize:11}} onClick={() => { setQuickTaskClientId(client.id); setQuickTaskText(''); }}>+ Task</button>
+                      <button className="ghost-button" style={{fontSize:11}} title="Log a contact entry in the activity log" onClick={() => {
+                        onLogClientActivity?.(client.id, {
+                          id: `act-${Date.now()}-contact`,
+                          type: 'Call',
+                          text: 'Client contacted.',
+                          accountName: '',
+                          createdAt: new Date().toISOString(),
+                        });
+                      }}>📞 Contacted</button>
+                    </div>
                   )}
                 </div>
               );
@@ -5052,6 +5063,7 @@ export default function App() {
             setShowOverview(false); setShowSOP(false);
           }}
           onAddClientTask={(clientId, task) => setState((current) => addTask(current, clientId, task))}
+          onLogClientActivity={(clientId, entry) => setState((current) => addActivityEntry(current, clientId, entry))}
           onCompleteTask={(clientId, taskId) => setState((current) => updateTask(current, clientId, taskId, { done: true, doneAt: new Date().toISOString() }))}
           monthlyGoal={currentCamProfile?.monthlyGoal || 0}
           onSetMonthlyGoal={goal => setState(s => updateCamProfile(s, currentCamProfile?.id, { monthlyGoal: goal }))}
