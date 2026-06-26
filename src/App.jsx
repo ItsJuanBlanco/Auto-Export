@@ -4933,6 +4933,11 @@ export default function App() {
           })() : (
             <>
               <div className="nav-label">Clients</div>
+              {currentCamClients.length === 0 && (
+                <div style={{padding:'10px 8px',fontSize:12,color:'var(--muted)',lineHeight:1.5}}>
+                  No clients yet. Type a name above and press <kbd style={{fontSize:10,padding:'1px 4px',border:'1px solid var(--border)',borderRadius:3}}>Enter</kbd> to add your first client.
+                </div>
+              )}
               {[...currentCamClients].sort((a, b) => {
                 if (a.pinned && !b.pinned) return -1;
                 if (b.pinned && !a.pinned) return 1;
