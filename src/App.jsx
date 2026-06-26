@@ -92,12 +92,12 @@ const STATIC_TABS = ['Activity', 'Tasks', 'Credentials & Notes', 'Price Checks',
 
 // Builds a lowercase-keyed registry map from import accounts + client registry.
 // Prevents silent cache misses when CSV and registry keys have different casing.
-function mergeRegistryCi(importAccounts, clientRegistry) {
+export function mergeRegistryCi(importAccounts, clientRegistry) {
   const merged = { ...(importAccounts || {}), ...(clientRegistry || {}) };
   return Object.fromEntries(Object.entries(merged).map(([k, v]) => [k.toLowerCase(), v]));
 }
-function ciMeta(regByLower, accountName) {
-  return regByLower[(accountName || '').toLowerCase()] || {};
+export function ciMeta(regByLower, accountName) {
+  return (regByLower || {})[(accountName || '').toLowerCase()] || {};
 }
 
 export function deriveClientBadge(client) {
@@ -188,7 +188,7 @@ export function buildTodayActions(client, dailyImport) {
   return actions;
 }
 
-function filteredAccountsForTab(client, dailyImport, tab) {
+export function filteredAccountsForTab(client, dailyImport, tab) {
   const regCi = mergeRegistryCi(dailyImport?.accounts, client?.accountRegistry);
   const snapshots = dailyImport?.snapshots || [];
   const entriesCi = Object.fromEntries(Object.entries(regCi).filter(([, account]) => {
@@ -2938,7 +2938,7 @@ function PnlCalendarHeatmap({ client }) {
   );
 }
 
-function searchClients(clients, query) {
+export function searchClients(clients, query) {
   if (!query || query.length < 2) return [];
   const q = query.toLowerCase();
   const results = [];
