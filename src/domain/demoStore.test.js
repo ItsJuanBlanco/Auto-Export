@@ -56,4 +56,40 @@ describe('demoStore', () => {
     expect(() => parseImportedState('{"foo":1}')).toThrow();
     expect(() => parseImportedState('not json')).toThrow();
   });
+
+  it('appendDailyImport does not create duplicate registry keys when NT CSV casing differs from stored casing', () => {
+    // Reproduce the root-cause bug: registry has 'APEX1234' but CSV exports 'apex1234'
+    let state = addClient(emptyState(), 'Test Trader');
+    const clientId = state.clients[0].id;
+    state = { ...state, clients: state.clients.map(c => c.id === clientId
+      ? { ...c, accountRegistry: { APEX1234: { accountName: 'APEX1234', accountType: 'Funded', alias: 'My Account' } } }
+      : c) };
+
+    const importResult = {
+      id: 'imp-1', date: '2026-06-25', importedAt: '2026-06-25T22:00:00Z',
+      accounts: { apex1234: { accountName: 'apex1234', accountType: 'Funded' } },
+      snapshots: [], strategies: [], orders: [], executions: [], flags: [],
+    };
+
+    const next = appendDailyImport(state, clientId, importResult);
+    const reg = next.clients[0].accountRegistry;
+    const keys = Object.keys(reg);
+
+    // Must not have both 'APEX1234' and 'apex1234' — only one entry
+    expect(keys.length).toBe(1);
+    // User-configured alias must be preserved (registry takes precedence over import)
+    expect(Object.values(reg)[0].alias).toBe('My Account');
+  });
+
+  it('upsertAccountMeta merges with existing entry case-insensitively without duplicating keys', () => {
+    let state = addClient(emptyState(), 'Test Trader');
+    const clientId = state.clients[0].id;
+    // Pre-seed with uppercase key
+    state = upsertAccountMeta(state, clientId, 'APEX1234', { accountType: 'Funded', alias: 'Original' });
+    // Update using lowercase — should update, not create a second key
+    const next = upsertAccountMeta(state, clientId, 'apex1234', { alias: 'Updated' });
+    const reg = next.clients[0].accountRegistry;
+    expect(Object.keys(reg).length).toBe(1);
+    expect(Object.values(reg)[0].alias).toBe('Updated');
+  });
 });
