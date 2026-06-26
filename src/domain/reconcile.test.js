@@ -228,4 +228,97 @@ describe('reconcileDailyImport', () => {
     expect(missing).toHaveLength(1);
     expect(missing[0].severity).toBe('Critical');
   });
+
+  it('raises Strategy disabled warning for each disabled strategy', () => {
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active' },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'ACC1', connection: 'Lucid', grossRealizedPnl: 100, accountBalance: 50100, weeklyPnl: 100 }],
+      strategies: [
+        { accountName: 'ACC1', strategyName: '0 - RBO-1.8', strategyFamily: 'RBO', enabled: true },
+        { accountName: 'ACC1', strategyName: '1 - IFSP-2.0', strategyFamily: 'IFSP', enabled: false },
+      ],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c5', date: '2026-06-25', registry, parsed });
+    expect(result.flags.filter(f => f.type === 'Strategy disabled')).toHaveLength(1);
+  });
+
+  it('raises Critical Unexpected strategy active for Inactive account with enabled strategy', () => {
+    const registry = {
+      OLD1: { accountName: 'OLD1', accountType: 'Funded', status: 'Inactive' },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'OLD1', connection: 'Live', grossRealizedPnl: 0, accountBalance: 50000, weeklyPnl: 0 }],
+      strategies: [{ accountName: 'OLD1', strategyName: '0 - RBO-1.8', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c6', date: '2026-06-25', registry, parsed });
+    expect(result.flags).toContainEqual(expect.objectContaining({ type: 'Unexpected strategy active', severity: 'Critical' }));
+  });
+
+  it('does not raise Missing account for Inactive accounts absent from the close', () => {
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Inactive' },
+    };
+    const parsed = { accounts: [], strategies: [], orders: [], executions: [] };
+    const result = reconcileDailyImport({ clientId: 'c7', date: '2026-06-25', registry, parsed });
+    expect(result.flags.filter(f => f.type === 'Missing account')).toHaveLength(0);
+  });
+
+  it('raises Critical Drawdown near limit when model-1 buffer is ≤ $500', () => {
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active', maxDrawdownLimit: 2000 },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'ACC1', connection: 'Lucid', grossRealizedPnl: -1600, accountBalance: 48400, trailingMaxDrawdown: -1600, weeklyPnl: -1600 }],
+      strategies: [{ accountName: 'ACC1', strategyName: '0 - RBO', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c8', date: '2026-06-25', registry, parsed });
+    // buffer = 2000 - 1600 = 400 → ≤500 → Critical near limit
+    expect(result.flags).toContainEqual(expect.objectContaining({ type: 'Drawdown near limit', severity: 'Critical' }));
+  });
+
+  it('raises Warning Drawdown approaching limit when model-1 buffer is ≤ $1200', () => {
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active', maxDrawdownLimit: 2000 },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'ACC1', connection: 'Lucid', grossRealizedPnl: -1100, accountBalance: 48900, trailingMaxDrawdown: -1100, weeklyPnl: -1100 }],
+      strategies: [{ accountName: 'ACC1', strategyName: '0 - RBO', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c9', date: '2026-06-25', registry, parsed });
+    // buffer = 2000 - 1100 = 900 → 500 < 900 ≤ 1200 → Warning approaching
+    expect(result.flags).toContainEqual(expect.objectContaining({ type: 'Drawdown approaching limit', severity: 'Warning' }));
+  });
+
+  it('raises Critical Drawdown breached for model-2 when rawDD ≤ 0', () => {
+    // Model-2: no maxDrawdownLimit configured, rawDD IS the remaining buffer
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active' }, // no maxDrawdownLimit
+    };
+    const parsed = {
+      accounts: [{ accountName: 'ACC1', connection: 'Lucid', grossRealizedPnl: -5000, accountBalance: 45000, trailingMaxDrawdown: -50, weeklyPnl: -5000 }],
+      strategies: [{ accountName: 'ACC1', strategyName: '0 - RBO', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c10', date: '2026-06-25', registry, parsed });
+    expect(result.flags).toContainEqual(expect.objectContaining({ type: 'Drawdown breached', severity: 'Critical' }));
+  });
+
+  it('raises Critical Drawdown near limit for model-2 when rawDD is 1–500', () => {
+    const registry = {
+      ACC1: { accountName: 'ACC1', accountType: 'Funded', status: 'Active' },
+    };
+    const parsed = {
+      accounts: [{ accountName: 'ACC1', connection: 'Lucid', grossRealizedPnl: -4700, accountBalance: 45300, trailingMaxDrawdown: 300, weeklyPnl: -4700 }],
+      strategies: [{ accountName: 'ACC1', strategyName: '0 - RBO', enabled: true }],
+      orders: [], executions: [],
+    };
+    const result = reconcileDailyImport({ clientId: 'c11', date: '2026-06-25', registry, parsed });
+    expect(result.flags).toContainEqual(expect.objectContaining({ type: 'Drawdown near limit', severity: 'Critical' }));
+  });
 });
