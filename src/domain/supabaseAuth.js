@@ -7,6 +7,7 @@ function mapAppUser(row) {
     authUserId: row.auth_user_id || '',
     username: row.username || '',
     role: row.role || 'CAM',
+    status: row.status || 'Active',
     displayName: row.display_name || row.username || '',
     email: row.email || '',
     camProfileId: row.cam_profiles?.legacy_key || null,
@@ -21,6 +22,7 @@ async function fetchAppUserByAuthId(authUserId) {
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error('Supabase Auth user is not linked to an app user.');
+  if (data.status === 'Inactive') throw new Error('This user account is inactive.');
   return mapAppUser(data);
 }
 
@@ -62,4 +64,3 @@ export async function signOutSupabase() {
   const { error } = await supabase.auth.signOut();
   if (error) throw new Error(error.message);
 }
-

@@ -150,9 +150,16 @@ state
 - [x] Wire flags and close-day updates to Supabase.
 - [x] Add Daily SOP template and checklist persistence to Supabase (`step_6_daily_sop.sql`).
 - [x] Add manager SOP Builder CRUD for sections/items.
+- [x] Wire Manager Users & Access to Supabase Auth + `app_users` via server API.
 - [ ] Move CSV import/reconcile writes to Supabase.
 - [ ] Add RLS policies.
 - [ ] Move credential encryption/decryption to server-side code.
+
+## Permission Direction
+
+- `Manager`: intended full operational permissions for users, clients, CAM assignments, SOP templates, account data, flags, tasks, reports, and imports.
+- `CAM`: intended scoped access to assigned clients and own Daily SOP progress.
+- Current hard database enforcement is still pending RLS. Until RLS is enabled, manager/CAM restrictions are primarily enforced by app flow and server API checks.
 
 ## Verification Queries
 

@@ -86,6 +86,12 @@ import {
   getSupabaseSessionAppUser,
   signOutSupabase,
 } from "./domain/supabaseAuth";
+import {
+  createSupabaseManagedUser,
+  deactivateSupabaseManagedUser,
+  loadSupabaseManagedUsers,
+  updateSupabaseManagedUser,
+} from "./domain/supabaseUserAdmin";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import {
   createSupabaseSopItem,
@@ -1485,6 +1491,268 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
   return lines.join("\n");
 }
 
+function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
+  const [newUser, setNewUser] = useState({
+    username: "",
+    password: "",
+    displayName: "",
+    email: "",
+    role: USER_ROLES.CAM,
+    camProfileId: "",
+  });
+  const [editUserId, setEditUserId] = useState(null);
+  const [editUserPatch, setEditUserPatch] = useState({});
+  const [status, setStatus] = useState(isSupabaseConfigured ? "loading" : "local");
+  const [error, setError] = useState("");
+
+  function refreshUsers() {
+    if (!isSupabaseConfigured) return;
+    setStatus("loading");
+    setError("");
+    loadSupabaseManagedUsers()
+      .then((remoteUsers) => {
+        if (!remoteUsers.length) {
+          throw new Error("Supabase returned zero app users. Check public.app_users and API env project.");
+        }
+        onUsersChange(remoteUsers);
+        setStatus("connected");
+      })
+      .catch((err) => {
+        console.error("[CRM] Failed to load managed users:", err);
+        setError(err.message || "Could not load users from Supabase.");
+        setStatus("error");
+      });
+  }
+
+  useEffect(() => {
+    refreshUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function submitNewUser(event) {
+    event.preventDefault();
+    if (!newUser.username || !newUser.password || !newUser.displayName || !newUser.email) return;
+    const isDuplicate = (users || []).some(
+      (u) => u.username?.toLowerCase() === newUser.username.toLowerCase(),
+    );
+    if (isDuplicate) {
+      alert(`Username "${newUser.username}" is already taken. Choose a different username.`);
+      return;
+    }
+    try {
+      setError("");
+      if (isSupabaseConfigured) {
+        const remoteUsers = await createSupabaseManagedUser(newUser);
+        onUsersChange(remoteUsers);
+        setStatus("connected");
+      } else {
+        onUsersChange(addUser(users, newUser));
+      }
+      setNewUser({
+        username: "",
+        password: "",
+        displayName: "",
+        email: "",
+        role: USER_ROLES.CAM,
+        camProfileId: "",
+      });
+    } catch (err) {
+      window.alert(`Could not create user: ${err.message}`);
+      setStatus("error");
+      setError(err.message);
+    }
+  }
+
+  async function saveUserEdit(user) {
+    const patch = { ...editUserPatch };
+    if (!patch.password) delete patch.password;
+    const nextUser = {
+      appUserId: user.appUserId,
+      username: patch.username ?? user.username,
+      displayName: patch.displayName ?? user.displayName,
+      email: patch.email ?? user.email,
+      role: patch.role ?? user.role,
+      camProfileId: patch.camProfileId ?? user.camProfileId ?? "",
+      status: patch.status ?? user.status ?? "Active",
+      password: patch.password,
+    };
+    if (!nextUser.username || !nextUser.displayName || !nextUser.email) return;
+    try {
+      setError("");
+      if (isSupabaseConfigured && user.appUserId) {
+        const remoteUsers = await updateSupabaseManagedUser(nextUser);
+        onUsersChange(remoteUsers);
+        setStatus("connected");
+      } else {
+        onUsersChange(updateUser(users, user.id, patch));
+      }
+      setEditUserId(null);
+      setEditUserPatch({});
+    } catch (err) {
+      window.alert(`Could not save user: ${err.message}`);
+      setStatus("error");
+      setError(err.message);
+    }
+  }
+
+  async function deactivateUser(user) {
+    if (user.role === USER_ROLES.MANAGER) return;
+    if (!window.confirm(`Deactivate user "${user.displayName}"? They will no longer be able to sign in.`)) return;
+    try {
+      setError("");
+      if (isSupabaseConfigured && user.appUserId) {
+        const remoteUsers = await deactivateSupabaseManagedUser(user.appUserId);
+        onUsersChange(remoteUsers);
+        setStatus("connected");
+      } else {
+        onUsersChange(deleteUser(users, user.id));
+      }
+    } catch (err) {
+      window.alert(`Could not deactivate user: ${err.message}`);
+      setStatus("error");
+      setError(err.message);
+    }
+  }
+
+  return (
+    <>
+      <div className="page-header manager-subpage-header">
+        <div>
+          <span className="eyebrow">Manager Admin</span>
+          <h1>Users &amp; Access</h1>
+          <div className="occ-status-row">
+            <Shield size={14} />
+            <span>Managers can manage users, roles, CAM assignments, and operational access.</span>
+            {status === "connected" ? <span className="positive">· Supabase synced</span> : null}
+            {status === "local" ? <span className="warning">· Local fallback</span> : null}
+          </div>
+        </div>
+        <button className="ghost-button" onClick={refreshUsers} disabled={!isSupabaseConfigured}>
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {status === "error" && <div className="notice warning">{error}</div>}
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h3>User directory</h3>
+          <span className="count">{users.length}</span>
+        </div>
+        <div className="table-wrap">
+          <table className="ops-table">
+            <thead>
+              <tr>
+                <th>Display name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>CAM profile</th>
+                <th>Status</th>
+                <th>Password</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const isEditing = editUserId === u.id;
+                const patch = editUserPatch;
+                return (
+                  <tr key={u.id} className={u.status === "Inactive" ? "row-muted" : ""}>
+                    <td>
+                      {isEditing ? (
+                        <input value={patch.displayName ?? u.displayName ?? ""} onChange={(e) => setEditUserPatch((p) => ({ ...p, displayName: e.target.value }))} />
+                      ) : u.displayName}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input value={patch.username ?? u.username ?? ""} onChange={(e) => setEditUserPatch((p) => ({ ...p, username: e.target.value }))} />
+                      ) : <code>{u.username}</code>}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input type="email" value={patch.email ?? u.email ?? ""} onChange={(e) => setEditUserPatch((p) => ({ ...p, email: e.target.value }))} />
+                      ) : <span className="muted">{u.email || "—"}</span>}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select value={patch.role ?? u.role} onChange={(e) => setEditUserPatch((p) => ({ ...p, role: e.target.value }))}>
+                          {Object.values(USER_ROLES).map((role) => <option key={role}>{role}</option>)}
+                        </select>
+                      ) : (
+                        <span className={u.role === USER_ROLES.MANAGER ? "badge success" : "badge muted"}>{u.role}</span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select value={patch.camProfileId ?? u.camProfileId ?? ""} onChange={(e) => setEditUserPatch((p) => ({ ...p, camProfileId: e.target.value }))}>
+                          <option value="">No CAM profile</option>
+                          {camProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+                        </select>
+                      ) : (
+                        u.camProfileId ? camProfiles.find((profile) => profile.id === u.camProfileId)?.name || u.camProfileId : "—"
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select value={patch.status ?? u.status ?? "Active"} onChange={(e) => setEditUserPatch((p) => ({ ...p, status: e.target.value }))}>
+                          <option>Active</option>
+                          <option>Inactive</option>
+                        </select>
+                      ) : (
+                        <span className={u.status === "Inactive" ? "badge warning" : "badge success"}>{u.status || "Active"}</span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input type="password" value={patch.password ?? ""} onChange={(e) => setEditUserPatch((p) => ({ ...p, password: e.target.value }))} placeholder="New password" autoComplete="new-password" />
+                      ) : <span className="muted">••••••</span>}
+                    </td>
+                    <td style={{ display: "flex", gap: 4 }}>
+                      {isEditing ? (
+                        <>
+                          <button className="primary-button" style={{ fontSize: 12, padding: "2px 8px" }} onClick={() => saveUserEdit(u)}>Save</button>
+                          <button className="ghost-button" onClick={() => { setEditUserId(null); setEditUserPatch({}); }}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="ghost-button" title="Edit" onClick={() => { setEditUserId(u.id); setEditUserPatch({}); }}><Edit3 size={13} /></button>
+                          <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER || u.status === "Inactive"} title="Deactivate user" onClick={() => deactivateUser(u)}><Trash2 size={13} /></button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h3>Add user</h3>
+          <span className="badge muted">Supabase Auth</span>
+        </div>
+        <form className="user-create-form" onSubmit={submitNewUser}>
+          <input required placeholder="Display name *" value={newUser.displayName} onChange={(e) => setNewUser((v) => ({ ...v, displayName: e.target.value }))} />
+          <input required placeholder="Username *" value={newUser.username} onChange={(e) => setNewUser((v) => ({ ...v, username: e.target.value }))} />
+          <input required type="email" placeholder="Email *" value={newUser.email} onChange={(e) => setNewUser((v) => ({ ...v, email: e.target.value }))} />
+          <input required type="password" placeholder="Password *" value={newUser.password} autoComplete="new-password" onChange={(e) => setNewUser((v) => ({ ...v, password: e.target.value }))} />
+          <select value={newUser.role} onChange={(e) => setNewUser((v) => ({ ...v, role: e.target.value }))}>
+            {Object.values(USER_ROLES).map((role) => <option key={role}>{role}</option>)}
+          </select>
+          <select value={newUser.camProfileId} onChange={(e) => setNewUser((v) => ({ ...v, camProfileId: e.target.value }))}>
+            <option value="">No CAM profile</option>
+            {camProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+          </select>
+          <button className="secondary-button"><Plus size={14} /> Add user</button>
+        </form>
+      </section>
+    </>
+  );
+}
+
 function SopBuilderPanel() {
   const [template, setTemplate] = useState(null);
   const [status, setStatus] = useState("loading");
@@ -1954,16 +2222,6 @@ function ManagerOverview({
   const [newCamUsername, setNewCamUsername] = useState("");
   const [newCamPassword, setNewCamPassword] = useState("");
   const [showCamUserFields, setShowCamUserFields] = useState(false);
-  const [newUser, setNewUser] = useState({
-    username: "",
-    password: "",
-    displayName: "",
-    email: "",
-    role: USER_ROLES.CAM,
-    camProfileId: "",
-  });
-  const [editUserId, setEditUserId] = useState(null);
-  const [editUserPatch, setEditUserPatch] = useState({});
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [announcementDraft, setAnnouncementDraft] = useState("");
   const [showPipeline, setShowPipeline] = useState(false);
@@ -2131,49 +2389,6 @@ function ManagerOverview({
     setShowCamUserFields(false);
   }
 
-  function submitNewUser(event) {
-    event.preventDefault();
-    if (!newUser.username || !newUser.password || !newUser.displayName) return;
-    const isDuplicate = (users || []).some(
-      (u) => u.username?.toLowerCase() === newUser.username.toLowerCase(),
-    );
-    if (isDuplicate) {
-      alert(
-        `Username "${newUser.username}" is already taken. Choose a different username.`,
-      );
-      return;
-    }
-    onUsersChange(addUser(users, newUser));
-    setNewUser({
-      username: "",
-      password: "",
-      displayName: "",
-      email: "",
-      role: USER_ROLES.CAM,
-      camProfileId: "",
-    });
-  }
-
-  function saveUserEdit(userId) {
-    if (editUserPatch.username) {
-      const conflict = (users || []).some(
-        (u) =>
-          u.id !== userId &&
-          u.username?.toLowerCase() === editUserPatch.username.toLowerCase(),
-      );
-      if (conflict) {
-        alert(`Username "${editUserPatch.username}" is already taken.`);
-        return;
-      }
-    }
-    // Don't overwrite password with empty string — only update if a new value was typed
-    const patch = { ...editUserPatch };
-    if (!patch.password) delete patch.password;
-    onUsersChange(updateUser(users, userId, patch));
-    setEditUserId(null);
-    setEditUserPatch({});
-  }
-
   const healthScore = (() => {
     if (!clients.length) return null;
     let score = 100;
@@ -2244,7 +2459,7 @@ function ManagerOverview({
             {session?.displayName || session?.username || "Manager"}
           </small>
         </div>
-        <button className="client-link active">
+        <button className={showUserPanel ? "client-link" : "client-link active"} onClick={() => setShowUserPanel(false)}>
           <Users size={16} />
           <span>Operations</span>
           <em>Live</em>
@@ -2312,8 +2527,8 @@ function ManagerOverview({
             ))}
         <div className="manager-sidebar-footer">
           <button
-            className="client-link"
-            onClick={() => setShowUserPanel((v) => !v)}
+            className={showUserPanel ? "client-link active" : "client-link"}
+            onClick={() => setShowUserPanel(true)}
           >
             <Shield size={16} />
             <span>Users & Access</span>
@@ -2325,6 +2540,10 @@ function ManagerOverview({
         </div>
       </aside>
       <section className="content">
+        {showUserPanel ? (
+          <UsersAccessPanel users={users} onUsersChange={onUsersChange} camProfiles={camProfiles} />
+        ) : (
+          <>
         <div className="page-header">
           <div>
             <span className="eyebrow">
@@ -4457,207 +4676,8 @@ function ManagerOverview({
           );
         })()}
 
-        {showUserPanel ? (
-          <section className="panel">
-            <div className="panel-heading">
-              <h3>Users &amp; Access</h3>
-              <Shield size={16} />
-            </div>
-            <div className="table-wrap">
-              <table className="ops-table">
-                <thead>
-                  <tr>
-                    <th>Display name</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>CAM profile</th>
-                    <th>Password</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => {
-                    const isEditing = editUserId === u.id;
-                    return (
-                      <tr key={u.id}>
-                        <td>{u.displayName}</td>
-                        <td>
-                          <code>{u.username}</code>
-                        </td>
-                        <td>
-                          {isEditing ? (
-                            <input
-                              style={{ width: 180 }}
-                              value={editUserPatch.email ?? u.email ?? ""}
-                              onChange={(e) =>
-                                setEditUserPatch((p) => ({
-                                  ...p,
-                                  email: e.target.value,
-                                }))
-                              }
-                              placeholder="email@company.com"
-                            />
-                          ) : (
-                            <span className="muted">{u.email || "—"}</span>
-                          )}
-                        </td>
-                        <td>
-                          <span
-                            className={
-                              u.role === USER_ROLES.MANAGER
-                                ? "badge success"
-                                : "badge muted"
-                            }
-                          >
-                            {u.role}
-                          </span>
-                        </td>
-                        <td>
-                          {u.camProfileId
-                            ? camProfiles.find((p) => p.id === u.camProfileId)
-                                ?.name || u.camProfileId
-                            : "—"}
-                        </td>
-                        <td>
-                          {isEditing ? (
-                            <input
-                              style={{ width: 130 }}
-                              type="password"
-                              value={editUserPatch.password ?? ""}
-                              onChange={(e) =>
-                                setEditUserPatch((p) => ({
-                                  ...p,
-                                  password: e.target.value,
-                                }))
-                              }
-                              placeholder="New password"
-                              autoComplete="new-password"
-                            />
-                          ) : (
-                            <span className="muted">••••••</span>
-                          )}
-                        </td>
-                        <td style={{ display: "flex", gap: 4 }}>
-                          {isEditing ? (
-                            <>
-                              <button
-                                className="primary-button"
-                                style={{ fontSize: 12, padding: "2px 8px" }}
-                                onClick={() => saveUserEdit(u.id)}
-                              >
-                                Save
-                              </button>
-                              <button
-                                className="ghost-button"
-                                onClick={() => {
-                                  setEditUserId(null);
-                                  setEditUserPatch({});
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                className="ghost-button"
-                                title="Edit"
-                                onClick={() => {
-                                  setEditUserId(u.id);
-                                  setEditUserPatch({});
-                                }}
-                              >
-                                <Edit3 size={13} />
-                              </button>
-                              <button
-                                className="ghost-button"
-                                disabled={u.role === USER_ROLES.MANAGER}
-                                title="Delete user"
-                                onClick={() => {
-                                  if (
-                                    window.confirm(
-                                      `Delete user "${u.displayName}"?`,
-                                    )
-                                  )
-                                    onUsersChange(deleteUser(users, u.id));
-                                }}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <form className="user-create-form" onSubmit={submitNewUser}>
-              <input
-                required
-                placeholder="Display name *"
-                value={newUser.displayName}
-                onChange={(e) =>
-                  setNewUser((v) => ({ ...v, displayName: e.target.value }))
-                }
-              />
-              <input
-                required
-                placeholder="Username *"
-                value={newUser.username}
-                onChange={(e) =>
-                  setNewUser((v) => ({ ...v, username: e.target.value }))
-                }
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={newUser.email}
-                onChange={(e) =>
-                  setNewUser((v) => ({ ...v, email: e.target.value }))
-                }
-              />
-              <input
-                required
-                type="password"
-                placeholder="Password *"
-                value={newUser.password}
-                autoComplete="new-password"
-                onChange={(e) =>
-                  setNewUser((v) => ({ ...v, password: e.target.value }))
-                }
-              />
-              <select
-                value={newUser.role}
-                onChange={(e) =>
-                  setNewUser((v) => ({ ...v, role: e.target.value }))
-                }
-              >
-                {Object.values(USER_ROLES).map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
-              </select>
-              <select
-                value={newUser.camProfileId}
-                onChange={(e) =>
-                  setNewUser((v) => ({ ...v, camProfileId: e.target.value }))
-                }
-              >
-                <option value="">No CAM profile</option>
-                {camProfiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <button className="secondary-button">
-                <Plus size={14} /> Add user
-              </button>
-            </form>
-          </section>
-        ) : null}
+          </>
+        )}
       </section>
     </main>
   );

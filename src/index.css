@@ -1377,6 +1377,10 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .manager-sidebar strong {
@@ -1824,10 +1828,23 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 .manager-sidebar-footer {
   margin-top: auto;
   border-top: 1px solid var(--line);
-  padding: 8px;
+  padding: 18px 8px 8px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, rgba(223, 238, 244, 0), #dfeef4 18px);
 }
 
 /* Users panel */
+.manager-subpage-header {
+  align-items: center;
+}
+
+.row-muted td {
+  opacity: 0.62;
+  background: rgba(148, 163, 184, 0.08);
+}
+
 .user-create-form {
   display: flex;
   flex-wrap: wrap;
@@ -2024,6 +2041,8 @@ tr:nth-child(2) .rank-badge { background: #6b728022; color: var(--text); }
 @media (max-width: 980px) {
   .app-shell, .manager-shell { grid-template-columns: 1fr; }
   .sidebar, .manager-sidebar { min-height: auto; }
+  .manager-sidebar { position: static; height: auto; max-height: none; }
+  .manager-sidebar-footer { position: static; }
   .metric-grid, .team-grid, .form-grid, .report-metrics, .cam-card-grid, .overview-grid, .exception-grid, .history-strip, .client-overview-hero, .target-row { grid-template-columns: 1fr; }
   .page-header { flex-direction: column; }
 }
