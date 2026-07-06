@@ -1,4 +1,5 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import Papa from "papaparse";
 import {
   AlertTriangle,
   BarChart3,
@@ -12,15 +13,27 @@ import {
   Download,
   Edit3,
   FileText,
+  Building2,
+  Clock3,
+  Eye,
+  EyeOff,
   Lock,
   LogOut,
+  Globe2,
+  Languages,
   Plus,
   RefreshCw,
+  MessageCircle,
+  Search,
   Shield,
+  Smartphone,
   Trash2,
   TrendingUp,
   Upload,
   Users,
+  History,
+  Mail,
+  Phone,
 } from "lucide-react";
 import AccountManager from "./components/AccountManager";
 import Dashboard from "./components/Dashboard";
@@ -34,19 +47,14 @@ import {
   removeClient,
   transferClient,
   togglePinClient,
-  addCamProfile,
   addTask,
   appendDailyImport,
-  createDemoState,
+  createInitialState,
   deleteActivityEntry,
   deleteTask,
-  exportFileName,
   getClientImportByDate,
-  loadDemoState,
-  parseImportedState,
   replaceDailyImport,
   resolveFlagInImport,
-  saveDemoState,
   selectCam,
   selectClient,
   todayIsoDate,
@@ -54,11 +62,8 @@ import {
   updateImportStatus,
   updateTask,
   upsertAccountMeta,
-  getStorageUsageKB,
-  updateCamProfile,
   removeAccountFromRegistry,
-  isLikelyDemoData,
-} from "./domain/demoStore";
+} from "./domain/crmStateStore";
 import { buildCamOverview } from "./domain/camOverview";
 import {
   recalculateDailyImport,
@@ -74,12 +79,6 @@ import {
 } from "./domain/report";
 import {
   USER_ROLES,
-  addUser,
-  authenticateUser,
-  deleteUser,
-  updateUser,
-  loadUsers,
-  saveUsers,
 } from "./domain/userStore";
 import {
   authenticateSupabaseAppUser,
@@ -94,8 +93,16 @@ import {
 } from "./domain/supabaseUserAdmin";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import {
+  loadSupabaseDataExport,
+  loadSupabaseIntakeSheet,
+} from "./domain/supabaseDataPortability";
+import {
   createSupabaseSopItem,
   createSupabaseSopSection,
+  createSupabaseReport,
+  createSupabaseAuditLog,
+  createSupabaseCamProfile,
+  createSupabaseClient,
   deleteSupabaseActivity,
   deleteSupabaseTask,
   deleteSupabaseTradingAccount,
@@ -104,13 +111,21 @@ import {
   insertSupabaseTask,
   loadSupabaseCrmState,
   loadSupabaseDailySopTemplate,
+  loadSupabaseReports,
+  loadSupabaseAuditLogs,
   replaceSupabaseOperationalFlags,
+  replaceSupabasePriceChecks,
+  softDeleteSupabaseClient,
+  transferSupabaseClient,
+  updateSupabaseClient,
+  updateSupabaseCamProfile,
   updateSupabaseDailyImportStatus,
   updateSupabaseOperationalFlag,
   updateSupabaseSopItem,
   updateSupabaseSopSection,
   updateSupabaseTask,
   updateSupabaseTradingAccount,
+  upsertSupabaseDailyImport,
   upsertSupabaseTradingAccount,
 } from "./domain/supabaseStore";
 
@@ -1224,7 +1239,7 @@ function clientsForCam(clients = [], camProfile = null) {
   return clients.filter((client) => allowed.has(client.id));
 }
 
-function LoginScreen({ onLogin, users }) {
+function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -1235,9 +1250,10 @@ function LoginScreen({ onLogin, users }) {
     setError("");
     setIsSubmitting(true);
     try {
-      const user = isSupabaseConfigured
-        ? await authenticateSupabaseAppUser(username, password)
-        : authenticateUser(username, password, users);
+      if (!isSupabaseConfigured) {
+        throw new Error("Supabase environment is required.");
+      }
+      const user = await authenticateSupabaseAppUser(username, password);
       if (!user) {
         setError("Invalid username or password.");
         return;
@@ -1491,6 +1507,134 @@ function buildTeamMessageReport(clients, camProfiles, totals, cams) {
   return lines.join("\n");
 }
 
+function auditSilently(entry) {
+  createSupabaseAuditLog(entry).catch((error) => {
+    console.error("[CRM] Failed to write audit log:", error);
+  });
+}
+
+function downloadTextFile(fileName, text, type = "application/json") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
+}
+
+function normalizedHeader(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function getCsvField(row = {}, aliases = []) {
+  const entries = Object.entries(row || {});
+  const normalizedAliases = aliases.map(normalizedHeader);
+  const found = entries.find(([key]) =>
+    normalizedAliases.includes(normalizedHeader(key)),
+  );
+  return String(found?.[1] ?? "").trim();
+}
+
+function parseConnection(value) {
+  return /rithmic/i.test(String(value || "")) ? "Rithmic" : "Tradovate";
+}
+
+function splitCredentialText(value = "") {
+  const text = String(value || "").trim();
+  if (!text) return { login: "", password: "" };
+  const loginMatch = text.match(/(?:login|user(?:name)?|email)\s*[:=-]\s*([^\n,;]+)/i);
+  const passwordMatch = text.match(/(?:pass(?:word)?)\s*[:=-]\s*([^\n,;]+)/i);
+  if (loginMatch || passwordMatch) {
+    return {
+      login: loginMatch?.[1]?.trim() || text,
+      password: passwordMatch?.[1]?.trim() || "",
+    };
+  }
+  const parts = text.split(/\s*[|,;]\s*/).filter(Boolean);
+  return {
+    login: parts[0] || text,
+    password: parts[1] || "",
+  };
+}
+
+function intakeCsvRowToClient(row = {}) {
+  const firstName = getCsvField(row, ["First Name", "First"]);
+  const lastName = getCsvField(row, ["Last Name", "Last"]);
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim()
+    || getCsvField(row, ["Full Name", "Name", "Client Name"]);
+  const email = getCsvField(row, [
+    "Whop Registration Email",
+    "Registration Email",
+    "Email",
+  ]);
+  const preferredTime = getCsvField(row, [
+    "Preferred Communication Time",
+    "Preferred Comm Time",
+    "Communication Time",
+  ]);
+  const notes = getCsvField(row, [
+    "Special Instructions or Notes",
+    "Special Instructions",
+    "Notes",
+  ]);
+  const connection = parseConnection(getCsvField(row, [
+    "Are you using Tradovate or Rithmic?",
+    "Tradovate or Rithmic",
+    "Connection",
+  ]));
+  const propCredentials = splitCredentialText(getCsvField(row, [
+    "Tradovate credentials",
+    "Tradovate Credentials",
+    "Prop Firm Credentials",
+    "Prop Credentials",
+  ]));
+  const vpsIp = getCsvField(row, ["VPS IP Address", "VPS IP", "VPS"]);
+  const vpsUsername = getCsvField(row, ["VPS Username", "VPS User"]);
+  const vpsPassword = getCsvField(row, ["VPS Password"]);
+  const ntLogin = getCsvField(row, ["NT8 username", "NT8 Username", "NinjaTrader username"]);
+  const ntPassword = getCsvField(row, ["NT8 password", "NT8 Password", "NinjaTrader password"]);
+
+  return {
+    name: fullName,
+    cam: "",
+    stage: "Onboarding",
+    email,
+    phone: getCsvField(row, ["Phone", "Phone Number"]),
+    timezone: getCsvField(row, ["Time Zone", "Timezone"]) || "America/New_York",
+    messenger: getCsvField(row, ["Discord Username", "Discord"]),
+    preferredChannel: "Discord",
+    notes: [
+      preferredTime ? `Preferred communication time: ${preferredTime}` : "",
+      notes,
+    ].filter(Boolean).join("\n"),
+    credentials: {
+      ip: vpsIp,
+      username: vpsUsername,
+      password: vpsPassword,
+      ntLogin,
+      ntPassword,
+    },
+    propFirms: propCredentials.login || propCredentials.password || connection
+      ? [{
+          id: `intake-${Date.now().toString(36)}`,
+          firmName: connection,
+          connection,
+          login: propCredentials.login,
+          password: propCredentials.password,
+          sortOrder: 0,
+        }]
+      : [],
+    source: "intake_csv",
+  };
+}
+
 function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
   const [newUser, setNewUser] = useState({
     username: "",
@@ -1502,13 +1646,17 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
   });
   const [editUserId, setEditUserId] = useState(null);
   const [editUserPatch, setEditUserPatch] = useState({});
-  const [status, setStatus] = useState(isSupabaseConfigured ? "loading" : "local");
+  const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
 
   function refreshUsers() {
-    if (!isSupabaseConfigured) return;
     setStatus("loading");
     setError("");
+    if (!isSupabaseConfigured) {
+      setStatus("error");
+      setError("Supabase environment is required.");
+      return;
+    }
     loadSupabaseManagedUsers()
       .then((remoteUsers) => {
         if (!remoteUsers.length) {
@@ -1541,13 +1689,22 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
     }
     try {
       setError("");
-      if (isSupabaseConfigured) {
-        const remoteUsers = await createSupabaseManagedUser(newUser);
-        onUsersChange(remoteUsers);
-        setStatus("connected");
-      } else {
-        onUsersChange(addUser(users, newUser));
-      }
+      const remoteUsers = await createSupabaseManagedUser(newUser);
+      onUsersChange(remoteUsers);
+      const createdUser = remoteUsers.find((u) => u.username === newUser.username.toLowerCase());
+      auditSilently({
+        entityType: "app_user",
+        entityId: createdUser?.appUserId || null,
+        action: "user.create",
+        afterData: {
+          username: newUser.username,
+          displayName: newUser.displayName,
+          email: newUser.email,
+          role: newUser.role,
+          camProfileId: newUser.camProfileId || null,
+        },
+      });
+      setStatus("connected");
       setNewUser({
         username: "",
         password: "",
@@ -1579,13 +1736,32 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
     if (!nextUser.username || !nextUser.displayName || !nextUser.email) return;
     try {
       setError("");
-      if (isSupabaseConfigured && user.appUserId) {
-        const remoteUsers = await updateSupabaseManagedUser(nextUser);
-        onUsersChange(remoteUsers);
-        setStatus("connected");
-      } else {
-        onUsersChange(updateUser(users, user.id, patch));
-      }
+      if (!user.appUserId) throw new Error("Supabase app user ID is missing.");
+      const remoteUsers = await updateSupabaseManagedUser(nextUser);
+      onUsersChange(remoteUsers);
+      auditSilently({
+        entityType: "app_user",
+        entityId: user.appUserId,
+        action: "user.update",
+        beforeData: {
+          username: user.username,
+          displayName: user.displayName,
+          email: user.email,
+          role: user.role,
+          camProfileId: user.camProfileId || null,
+          status: user.status || "Active",
+        },
+        afterData: {
+          username: nextUser.username,
+          displayName: nextUser.displayName,
+          email: nextUser.email,
+          role: nextUser.role,
+          camProfileId: nextUser.camProfileId || null,
+          status: nextUser.status || "Active",
+          passwordChanged: Boolean(patch.password),
+        },
+      });
+      setStatus("connected");
       setEditUserId(null);
       setEditUserPatch({});
     } catch (err) {
@@ -1600,13 +1776,17 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
     if (!window.confirm(`Deactivate user "${user.displayName}"? They will no longer be able to sign in.`)) return;
     try {
       setError("");
-      if (isSupabaseConfigured && user.appUserId) {
-        const remoteUsers = await deactivateSupabaseManagedUser(user.appUserId);
-        onUsersChange(remoteUsers);
-        setStatus("connected");
-      } else {
-        onUsersChange(deleteUser(users, user.id));
-      }
+      if (!user.appUserId) throw new Error("Supabase app user ID is missing.");
+      const remoteUsers = await deactivateSupabaseManagedUser(user.appUserId);
+      onUsersChange(remoteUsers);
+      auditSilently({
+        entityType: "app_user",
+        entityId: user.appUserId,
+        action: "user.deactivate",
+        beforeData: { username: user.username, status: user.status || "Active" },
+        afterData: { username: user.username, status: "Inactive" },
+      });
+      setStatus("connected");
     } catch (err) {
       window.alert(`Could not deactivate user: ${err.message}`);
       setStatus("error");
@@ -1624,7 +1804,6 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
             <Shield size={14} />
             <span>Managers can manage users, roles, CAM assignments, and operational access.</span>
             {status === "connected" ? <span className="positive">· Supabase synced</span> : null}
-            {status === "local" ? <span className="warning">· Local fallback</span> : null}
           </div>
         </div>
         <button className="ghost-button" onClick={refreshUsers} disabled={!isSupabaseConfigured}>
@@ -1753,6 +1932,491 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
   );
 }
 
+function AuditLogsPanel() {
+  const [logs, setLogs] = useState([]);
+  const [status, setStatus] = useState("loading");
+  const [error, setError] = useState("");
+
+  function loadLogs() {
+    setStatus("loading");
+    setError("");
+    loadSupabaseAuditLogs({ limit: 50 })
+      .then((rows) => {
+        setLogs(rows);
+        setStatus("ready");
+      })
+      .catch((err) => {
+        console.error("[CRM] Failed to load audit logs:", err);
+        setError(err.message || "Could not load audit logs.");
+        setStatus("error");
+      });
+  }
+
+  useEffect(() => {
+    loadLogs();
+  }, []);
+
+  function describeLog(log) {
+    const data = log.afterData || {};
+    const name = data.clientName || data.name || data.username || data.accountName || data.title || data.text || "";
+    return name ? `${log.action} · ${name}` : log.action;
+  }
+
+  return (
+    <>
+      <div className="page-header manager-subpage-header">
+        <div>
+          <span className="eyebrow">Manager Admin</span>
+          <h1>Audit Logs</h1>
+          <div className="occ-status-row">
+            <History size={14} />
+            <span>Recent database-backed operational changes.</span>
+            {status === "ready" ? <span className="positive">· Supabase synced</span> : null}
+          </div>
+        </div>
+        <button className="ghost-button" onClick={loadLogs}>
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {status === "error" ? <div className="notice warning">{error}</div> : null}
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h3>Recent activity</h3>
+          <span className="count">{logs.length}</span>
+        </div>
+        <div className="table-wrap">
+          <table className="ops-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log) => (
+                <tr key={log.id}>
+                  <td>{log.createdAt ? new Date(log.createdAt).toLocaleString("en-US") : "—"}</td>
+                  <td>
+                    <strong>{log.userDisplayName || "System"}</strong>
+                    {log.userEmail ? <small>{log.userEmail}</small> : null}
+                  </td>
+                  <td>{log.action}</td>
+                  <td>{log.entityType}</td>
+                  <td>
+                    <small>{describeLog(log)}</small>
+                  </td>
+                </tr>
+              ))}
+              {!logs.length && (
+                <tr>
+                  <td colSpan={5}>
+                    <span className="muted">
+                      {status === "loading" ? "Loading audit logs..." : "No audit logs yet."}
+                    </span>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function DataToolsPanel({ clients = [], camProfiles = [], onImportClient, session }) {
+  const [status, setStatus] = useState("idle");
+  const [message, setMessage] = useState("");
+  const [importRows, setImportRows] = useState([]);
+  const [importError, setImportError] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [isFetchingIntake, setIsFetchingIntake] = useState(false);
+
+  const duplicateKeys = useMemo(
+    () => {
+      const keys = new Set();
+      for (const client of clients || []) {
+        const name = String(client.name || "").trim().toLowerCase();
+        const email = String(client.profile?.email || "").trim().toLowerCase();
+        if (name) keys.add(`name:${name}`);
+        if (email) keys.add(`email:${email}`);
+      }
+      return keys;
+    },
+    [clients],
+  );
+
+  function duplicateReason(row = {}) {
+    const name = String(row.name || "").trim().toLowerCase();
+    const email = String(row.email || "").trim().toLowerCase();
+    if (name && duplicateKeys.has(`name:${name}`)) return "Name already exists";
+    if (email && duplicateKeys.has(`email:${email}`)) return "Email already exists";
+    return "";
+  }
+
+  function camForClient(clientId) {
+    return (camProfiles || []).find((cam) => (cam.clientIds || []).includes(clientId)) || null;
+  }
+
+  function exportClientCsv() {
+    const headers = [
+      "name",
+      "cam",
+      "stage",
+      "email",
+      "additionalEmails",
+      "phone",
+      "timezone",
+      "country",
+      "startDate",
+      "preferredChannel",
+      "language",
+      "productKey",
+      "messenger",
+      "notes",
+    ];
+    const rows = [
+      headers.map(csvCell).join(","),
+      ...(clients || []).map((client) => {
+        const cam = camForClient(client.id);
+        const profile = client.profile || {};
+        return [
+          client.name,
+          cam?.name || "",
+          profile.stage || client.status || "",
+          profile.email || "",
+          (profile.additionalEmails || []).join("; "),
+          profile.phone || "",
+          profile.timezone || "",
+          profile.country || "",
+          profile.startDate || "",
+          profile.preferredChannel || "",
+          profile.language || "",
+          profile.productKey || "",
+          profile.messenger || "",
+          client.notes || "",
+        ].map(csvCell).join(",");
+      }),
+    ];
+    downloadTextFile(
+      `cam-crm-clients-${new Date().toISOString().slice(0, 10)}.csv`,
+      rows.join("\n"),
+      "text/csv;charset=utf-8",
+    );
+    auditSilently({
+      entityType: "data_export",
+      action: "data_export.clients_csv",
+      afterData: { clientCount: clients.length },
+    });
+  }
+
+  async function exportDatabaseSnapshot() {
+    try {
+      setStatus("exporting");
+      setMessage("Preparing Supabase export...");
+      const payload = await loadSupabaseDataExport();
+      downloadTextFile(
+        `cam-crm-supabase-export-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(payload, null, 2),
+      );
+      setStatus("ready");
+      setMessage(`Exported ${Object.keys(payload.tables || {}).length} tables. Credentials are excluded.`);
+    } catch (error) {
+      console.error("[CRM] Failed to export database snapshot:", error);
+      setStatus("error");
+      setMessage(error.message || "Could not export database snapshot.");
+    }
+  }
+
+  function normalizeCsvRows(data = [], mode = "client_directory") {
+    const seen = new Set();
+    return (data || [])
+      .map((row) => (
+        mode === "intake"
+          ? intakeCsvRowToClient(row)
+          : {
+              name: String(row.name || row.client || row.clientName || "").trim(),
+              cam: String(row.cam || row.camName || row.assignedCam || "").trim(),
+              stage: String(row.stage || row.status || "Active").trim() || "Active",
+              email: String(row.email || "").trim(),
+              additionalEmails: String(row.additionalEmails || row.additional_emails || "")
+                .split(/[;,|]/)
+                .map((email) => email.trim())
+                .filter(Boolean),
+              phone: String(row.phone || "").trim(),
+              timezone: String(row.timezone || "").trim(),
+              country: String(row.country || "").trim(),
+              startDate: String(row.startDate || row.start_date || "").trim(),
+              preferredChannel: String(row.preferredChannel || row.preferred_channel || "").trim(),
+              language: String(row.language || "").trim(),
+              productKey: String(row.productKey || row.product_key || "").trim(),
+              propFirm: String(row.propFirm || row.prop_firm || "").trim(),
+              messenger: String(row.messenger || "").trim(),
+              notes: String(row.notes || "").trim(),
+              credentials: null,
+              propFirms: [],
+              source: "client_csv",
+            }
+      ))
+      .filter((row) => {
+        if (!row.name) return false;
+        const nameKey = `name:${row.name.toLowerCase()}`;
+        const emailKey = row.email ? `email:${String(row.email).toLowerCase()}` : "";
+        if (seen.has(nameKey) || (emailKey && seen.has(emailKey))) return false;
+        seen.add(nameKey);
+        if (emailKey) seen.add(emailKey);
+        return true;
+      });
+  }
+
+  function applyParsedCsvRows(data = [], mode = "client_directory", sourceLabel = "CSV") {
+    const rows = normalizeCsvRows(data, mode);
+    setImportRows(rows);
+    setMessage(mode === "intake"
+      ? `${sourceLabel} parsed. New clients will be imported without CAM assignment.`
+      : "Client directory CSV parsed.");
+  }
+
+  function parseClientCsv(file, mode = "client_directory") {
+    setImportRows([]);
+    setImportError("");
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: ({ data, errors }) => {
+        if (errors?.length) {
+          setImportError(errors[0].message || "Could not parse CSV.");
+          return;
+        }
+        applyParsedCsvRows(data, mode, "Intake CSV");
+      },
+      error: (error) => {
+        setImportError(error.message || "Could not parse CSV.");
+      },
+    });
+  }
+
+  async function fetchIntakeSheet() {
+    setIsFetchingIntake(true);
+    setImportRows([]);
+    setImportError("");
+    setStatus("loading");
+    setMessage("Fetching Google Sheet intake data...");
+    try {
+      const payload = await loadSupabaseIntakeSheet();
+      Papa.parse(payload.csv || "", {
+        header: true,
+        skipEmptyLines: true,
+        complete: ({ data, errors }) => {
+          if (errors?.length) {
+            setStatus("error");
+            setImportError(errors[0].message || "Could not parse Google Sheet CSV.");
+            return;
+          }
+          const parsedRows = normalizeCsvRows(data, "intake");
+          const duplicateCount = parsedRows.filter((row) => duplicateReason(row)).length;
+          setImportRows(parsedRows);
+          setMessage("Google Sheet parsed. New clients will be imported without CAM assignment.");
+          auditSilently({
+            entityType: "data_import",
+            action: "data_import.google_sheet.fetch",
+            afterData: {
+              manager: session?.displayName || session?.username || "",
+              parsedCount: data?.length || 0,
+              newCount: parsedRows.length - duplicateCount,
+              duplicateCount,
+            },
+          });
+          setStatus("ready");
+        },
+        error: (error) => {
+          setStatus("error");
+          setImportError(error.message || "Could not parse Google Sheet CSV.");
+        },
+      });
+    } catch (error) {
+      console.error("[CRM] Failed to fetch intake sheet:", error);
+      setStatus("error");
+      setMessage(error.message || "Could not fetch Google Sheet intake data.");
+    } finally {
+      setIsFetchingIntake(false);
+    }
+  }
+
+  async function importClients() {
+    const rows = importRows.filter((row) => !duplicateReason(row));
+    if (!rows.length) {
+      setImportError("No new clients to import. Existing names/emails are skipped.");
+      return;
+    }
+    setIsImporting(true);
+    setImportError("");
+    try {
+      let imported = 0;
+      for (const row of rows) {
+        const cam = (camProfiles || []).find((profile) => (
+          profile.id === row.cam || profile.name.toLowerCase() === row.cam.toLowerCase()
+        ));
+        await onImportClient?.(row, cam?.id || "");
+        imported += 1;
+      }
+      setImportRows([]);
+      setStatus("ready");
+      setMessage(`Imported ${imported} client${imported !== 1 ? "s" : ""} to Supabase.`);
+      auditSilently({
+        entityType: "data_import",
+        action: rows.some((row) => row.source === "intake_csv")
+          ? "data_import.google_sheet.import"
+          : "data_import.clients_csv",
+        afterData: {
+          manager: session?.displayName || session?.username || "",
+          importedCount: imported,
+          duplicateCount: importRows.length - rows.length,
+          source: rows.some((row) => row.source === "intake_csv")
+            ? "intake"
+            : "client_csv",
+        },
+      });
+    } catch (error) {
+      console.error("[CRM] Failed to import clients CSV:", error);
+      setImportError(error.message || "Could not import clients.");
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  const previewRows = importRows.map((row) => ({
+    ...row,
+    duplicateReason: duplicateReason(row),
+  }));
+  const newRows = previewRows.filter((row) => !row.duplicateReason);
+  const duplicateRows = previewRows.filter((row) => row.duplicateReason);
+
+  return (
+    <section className="panel data-tools-panel">
+      <div className="panel-heading">
+        <h3>Data Tools</h3>
+        <span className="badge muted">Supabase safe</span>
+      </div>
+      <div className="data-tools-grid">
+        <div className="data-tool-card">
+          <strong>Database snapshot</strong>
+          <p className="muted">
+            Export operational Supabase tables to JSON. Credential rows are excluded.
+          </p>
+          <button className="secondary-button" onClick={exportDatabaseSnapshot} disabled={status === "exporting"}>
+            <Download size={14} /> {status === "exporting" ? "Exporting..." : "Export JSON"}
+          </button>
+        </div>
+        <div className="data-tool-card">
+          <strong>Client directory</strong>
+          <p className="muted">
+            Export visible clients and CAM assignments as CSV.
+          </p>
+          <button className="ghost-button" onClick={exportClientCsv}>
+            <Download size={14} /> Export Clients CSV
+          </button>
+        </div>
+        <div className="data-tool-card">
+          <strong>Import clients CSV</strong>
+          <p className="muted">
+            Columns: name, cam, stage, email, additionalEmails, phone, timezone, country, startDate, preferredChannel, language, productKey, messenger, notes.
+          </p>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => parseClientCsv(event.target.files?.[0], "client_directory")}
+          />
+          <div className="data-tool-divider" />
+          <strong>Import intake CSV</strong>
+          <p className="muted">
+            Pull from the connected Google Sheet, or upload the exported CSV. New rows become unassigned onboarding clients.
+          </p>
+          <button
+            className="secondary-button"
+            onClick={fetchIntakeSheet}
+            disabled={isFetchingIntake}
+          >
+            <RefreshCw size={14} /> {isFetchingIntake ? "Fetching..." : "Fetch Google Sheet"}
+          </button>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => parseClientCsv(event.target.files?.[0], "intake")}
+          />
+          {importRows.length ? (
+            <div className="muted" style={{ fontSize: 12 }}>
+              {newRows.length} new · {duplicateRows.length} duplicate skipped
+            </div>
+          ) : null}
+          {previewRows.length ? (
+            <div className="intake-preview">
+              <div className="intake-preview-head">
+                <strong>Preview</strong>
+                <span className="muted">
+                  {newRows.length} ready · {duplicateRows.length} duplicate
+                </span>
+              </div>
+              <div className="table-wrap">
+                <table className="ops-table compact-table">
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Email</th>
+                      <th>Stage</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.slice(0, 8).map((row, index) => (
+                      <tr key={`${row.name}-${row.email}-${index}`}>
+                        <td>
+                          <strong>{row.name}</strong>
+                        </td>
+                        <td className="muted">{row.email || "—"}</td>
+                        <td>{row.stage || "Onboarding"}</td>
+                        <td>
+                          {row.duplicateReason ? (
+                            <span className="badge warning">
+                              {row.duplicateReason}
+                            </span>
+                          ) : (
+                            <span className="badge success">Ready</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {previewRows.length > 8 ? (
+                <small className="muted">
+                  Showing first 8 rows of {previewRows.length}.
+                </small>
+              ) : null}
+            </div>
+          ) : null}
+          {importError ? <div className="notice warning">{importError}</div> : null}
+          <button className="primary-button" onClick={importClients} disabled={!newRows.length || isImporting}>
+            <Upload size={14} /> {isImporting ? "Importing..." : `Import ${newRows.length || ""}`.trim()}
+          </button>
+        </div>
+      </div>
+      {message ? (
+        <div className={`notice ${status === "error" ? "warning" : ""}`}>
+          {message}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function SopBuilderPanel() {
   const [template, setTemplate] = useState(null);
   const [status, setStatus] = useState("loading");
@@ -1796,12 +2460,19 @@ function SopBuilderPanel() {
         ),
       ) + 1;
     try {
-      await createSupabaseSopSection(template.id, {
+      const payload = {
         key: `section-${Date.now()}`,
         title: sectionDraft.title.trim(),
         time: sectionDraft.time.trim(),
         emoji: sectionDraft.emoji.trim(),
         displayOrder,
+      };
+      const saved = await createSupabaseSopSection(template.id, payload);
+      auditSilently({
+        entityType: "sop_section",
+        entityId: saved?.id || null,
+        action: "sop_section.create",
+        afterData: { ...payload, templateId: template.id },
       });
       setSectionDraft({ title: "", time: "", emoji: "" });
       loadTemplate();
@@ -1814,11 +2485,18 @@ function SopBuilderPanel() {
     const draft = editingSections[sectionId];
     if (!draft?.title?.trim()) return;
     try {
-      await updateSupabaseSopSection(sectionId, {
+      const payload = {
         title: draft.title.trim(),
         time: draft.time || "",
         emoji: draft.emoji || "",
         displayOrder: draft.displayOrder,
+      };
+      await updateSupabaseSopSection(sectionId, payload);
+      auditSilently({
+        entityType: "sop_section",
+        entityId: sectionId,
+        action: "sop_section.update",
+        afterData: payload,
       });
       setEditingSections((current) => ({ ...current, [sectionId]: null }));
       loadTemplate();
@@ -1836,6 +2514,13 @@ function SopBuilderPanel() {
       return;
     try {
       await updateSupabaseSopSection(section.id, { isActive: false });
+      auditSilently({
+        entityType: "sop_section",
+        entityId: section.id,
+        action: "sop_section.hide",
+        beforeData: { title: section.title, isActive: section.isActive },
+        afterData: { title: section.title, isActive: false },
+      });
       loadTemplate();
     } catch (err) {
       window.alert(`Could not hide SOP section: ${err.message}`);
@@ -1851,10 +2536,17 @@ function SopBuilderPanel() {
         ...(section.items || []).map((item) => Number(item.displayOrder || 0)),
       ) + 1;
     try {
-      await createSupabaseSopItem(section.id, {
+      const payload = {
         key: `${section.key || "item"}-${Date.now()}`,
         text,
         displayOrder,
+      };
+      const saved = await createSupabaseSopItem(section.id, payload);
+      auditSilently({
+        entityType: "sop_item",
+        entityId: saved?.id || null,
+        action: "sop_item.create",
+        afterData: { ...payload, sectionId: section.id },
       });
       setItemDrafts((current) => ({ ...current, [section.id]: "" }));
       loadTemplate();
@@ -1867,9 +2559,16 @@ function SopBuilderPanel() {
     const draft = editingItems[itemId];
     if (!draft?.text?.trim()) return;
     try {
-      await updateSupabaseSopItem(itemId, {
+      const payload = {
         text: draft.text.trim(),
         displayOrder: draft.displayOrder,
+      };
+      await updateSupabaseSopItem(itemId, payload);
+      auditSilently({
+        entityType: "sop_item",
+        entityId: itemId,
+        action: "sop_item.update",
+        afterData: payload,
       });
       setEditingItems((current) => ({ ...current, [itemId]: null }));
       loadTemplate();
@@ -1882,6 +2581,13 @@ function SopBuilderPanel() {
     if (!window.confirm(`Hide this SOP item?\n\n${item.text}`)) return;
     try {
       await updateSupabaseSopItem(item.id, { isActive: false });
+      auditSilently({
+        entityType: "sop_item",
+        entityId: item.id,
+        action: "sop_item.hide",
+        beforeData: { text: item.text, isActive: item.isActive },
+        afterData: { text: item.text, isActive: false },
+      });
       loadTemplate();
     } catch (err) {
       window.alert(`Could not hide SOP item: ${err.message}`);
@@ -2204,9 +2910,10 @@ function ManagerOverview({
   clients,
   camProfiles = [],
   onOpenCam,
-  onLoadDemo,
   onCreateCam,
+  onUpdateCamProfile,
   onAddClient,
+  onImportClient,
   onAppendDailyImport,
   onLogout,
   users = [],
@@ -2215,15 +2922,10 @@ function ManagerOverview({
   onUpdateClientAccount,
   onTransferClient,
   onResolveFlag,
-  teamAnnouncement = "",
-  onSetAnnouncement,
 }) {
   const [newCamName, setNewCamName] = useState("");
-  const [newCamUsername, setNewCamUsername] = useState("");
-  const [newCamPassword, setNewCamPassword] = useState("");
-  const [showCamUserFields, setShowCamUserFields] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false);
-  const [announcementDraft, setAnnouncementDraft] = useState("");
+  const [showAuditPanel, setShowAuditPanel] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
   const [showBatchImport, setShowBatchImport] = useState(false);
   const [batchImportResult, setBatchImportResult] = useState(null);
@@ -2236,6 +2938,7 @@ function ManagerOverview({
   });
   const [showNewClient, setShowNewClient] = useState(false);
   const [showSopBuilder, setShowSopBuilder] = useState(false);
+  const [showDataTools, setShowDataTools] = useState(false);
   const [fundedSort, setFundedSort] = useState({ col: "buffer", dir: -1 });
   const [managerSearch, setManagerSearch] = useState("");
   const teamHistory = useMemo(
@@ -2244,12 +2947,10 @@ function ManagerOverview({
   );
   const cams = useMemo(
     () =>
-      (camProfiles.length ? camProfiles : createDemoState().camProfiles).map(
-        (profile) => {
-          const summary = buildManagerSummary(clientsForCam(clients, profile));
-          return { ...profile, ...summary, flags: summary.openFlags };
-        },
-      ),
+      camProfiles.map((profile) => {
+        const summary = buildManagerSummary(clientsForCam(clients, profile));
+        return { ...profile, ...summary, flags: summary.openFlags };
+      }),
     [clients, camProfiles],
   );
   const totals = useMemo(
@@ -2282,7 +2983,7 @@ function ManagerOverview({
     [clients, camProfiles],
   );
   const managerInsights = useMemo(
-    () => buildPortfolioInsights(clients, clients),
+    () => buildPortfolioInsights(clients),
     [clients],
   );
   const allFunded = useMemo(
@@ -2378,15 +3079,8 @@ function ManagerOverview({
   function submitCam(event) {
     event.preventDefault();
     if (!newCamName.trim()) return;
-    onCreateCam(
-      newCamName.trim(),
-      newCamUsername.trim(),
-      newCamPassword.trim(),
-    );
+    onCreateCam(newCamName.trim());
     setNewCamName("");
-    setNewCamUsername("");
-    setNewCamPassword("");
-    setShowCamUserFields(false);
   }
 
   const healthScore = (() => {
@@ -2459,79 +3153,90 @@ function ManagerOverview({
             {session?.displayName || session?.username || "Manager"}
           </small>
         </div>
-        <button className={showUserPanel ? "client-link" : "client-link active"} onClick={() => setShowUserPanel(false)}>
-          <Users size={16} />
-          <span>Operations</span>
-          <em>Live</em>
-        </button>
-        <input
-          className="client-search"
-          value={managerSearch}
-          placeholder="Search clients..."
-          onChange={(e) => setManagerSearch(e.target.value)}
-          style={{ margin: "8px 8px 4px" }}
-        />
-        {managerSearch.length >= 2
-          ? (() => {
-              const q = managerSearch.toLowerCase();
-              const results = clients.flatMap((c) => {
-                const cam = camProfiles.find((p) =>
-                  (p.clientIds || []).includes(c.id),
+        <div className="manager-sidebar-main">
+          <button className={showUserPanel ? "client-link" : "client-link active"} onClick={() => setShowUserPanel(false)}>
+            <Users size={16} />
+            <span>Operations</span>
+            <em>Live</em>
+          </button>
+          <input
+            className="client-search"
+            value={managerSearch}
+            placeholder="Search clients..."
+            onChange={(e) => setManagerSearch(e.target.value)}
+          />
+          {managerSearch.length >= 2
+            ? (() => {
+                const q = managerSearch.toLowerCase();
+                const results = clients.flatMap((c) => {
+                  const cam = camProfiles.find((p) =>
+                    (p.clientIds || []).includes(c.id),
+                  );
+                  const nameMatch = c.name?.toLowerCase().includes(q);
+                  const accountMatch = Object.keys(c.accountRegistry || {}).some(
+                    (k) =>
+                      k.toLowerCase().includes(q) ||
+                      (c.accountRegistry[k].alias || "")
+                        .toLowerCase()
+                        .includes(q),
+                  );
+                  if (!nameMatch && !accountMatch) return [];
+                  return [{ client: c, cam, nameMatch, accountMatch }];
+                });
+                return results.length ? (
+                  results.map(({ client, cam }) => (
+                    <button
+                      key={client.id}
+                      className="client-link client-link-search"
+                      onClick={() => {
+                        onOpenCam(cam?.id, client.id);
+                        setManagerSearch("");
+                      }}
+                    >
+                      <span>{client.name}</span>
+                      <small className="muted">{cam?.name || "—"}</small>
+                    </button>
+                  ))
+                ) : (
+                  <div className="nav-label muted manager-sidebar-empty">
+                    No match
+                  </div>
                 );
-                const nameMatch = c.name?.toLowerCase().includes(q);
-                const accountMatch = Object.keys(c.accountRegistry || {}).some(
-                  (k) =>
-                    k.toLowerCase().includes(q) ||
-                    (c.accountRegistry[k].alias || "")
-                      .toLowerCase()
-                      .includes(q),
-                );
-                if (!nameMatch && !accountMatch) return [];
-                return [{ client: c, cam, nameMatch, accountMatch }];
-              });
-              return results.length ? (
-                results.map(({ client, cam }) => (
-                  <button
-                    key={client.id}
-                    className="client-link client-link-search"
-                    onClick={() => {
-                      onOpenCam(cam?.id, client.id);
-                      setManagerSearch("");
-                    }}
-                  >
-                    <span>{client.name}</span>
-                    <small className="muted">{cam?.name || "—"}</small>
-                  </button>
-                ))
-              ) : (
-                <div
-                  className="nav-label muted"
-                  style={{ padding: "4px 12px", fontSize: 12 }}
+              })()
+            : cams.map((cam) => (
+                <button
+                  className="client-link"
+                  key={cam.id}
+                  onClick={() => onOpenCam(cam.id)}
                 >
-                  No match
-                </div>
-              );
-            })()
-          : cams.map((cam) => (
-              <button
-                className="client-link"
-                key={cam.id}
-                onClick={() => onOpenCam(cam.id)}
-              >
-                <BarChart3 size={16} />
-                <span>{cam.name}</span>
-                <em className={cam.dailyPnl >= 0 ? "positive" : "negative"}>
-                  {formatCurrency(cam.dailyPnl)}
-                </em>
-              </button>
-            ))}
+                  <BarChart3 size={16} />
+                  <span>{cam.name}</span>
+                  <em className={cam.dailyPnl >= 0 ? "positive" : "negative"}>
+                    {formatCurrency(cam.dailyPnl)}
+                  </em>
+                </button>
+              ))}
+        </div>
         <div className="manager-sidebar-footer">
           <button
             className={showUserPanel ? "client-link active" : "client-link"}
-            onClick={() => setShowUserPanel(true)}
+            onClick={() => {
+              setShowUserPanel(true);
+              setShowAuditPanel(false);
+            }}
           >
             <Shield size={16} />
             <span>Users & Access</span>
+          </button>
+          <button
+            className={showAuditPanel ? "client-link active" : "client-link"}
+            onClick={() => {
+              setShowAuditPanel(true);
+              setShowUserPanel(false);
+            }}
+          >
+            <History size={16} />
+            <span>Audit Logs</span>
           </button>
           <button className="client-link" onClick={onLogout}>
             <LogOut size={16} />
@@ -2542,6 +3247,8 @@ function ManagerOverview({
       <section className="content">
         {showUserPanel ? (
           <UsersAccessPanel users={users} onUsersChange={onUsersChange} camProfiles={camProfiles} />
+        ) : showAuditPanel ? (
+          <AuditLogsPanel />
         ) : (
           <>
         <div className="page-header">
@@ -2598,6 +3305,12 @@ function ManagerOverview({
               ⬆ Batch Import
             </button>
             <button
+              className={showDataTools ? "secondary-button" : "ghost-button"}
+              onClick={() => setShowDataTools((value) => !value)}
+            >
+              <Download size={14} /> Data Tools
+            </button>
+            <button
               className="ghost-button"
               onClick={() => {
                 const txt = buildTeamWeeklyReport(clients, camProfiles);
@@ -2608,19 +3321,6 @@ function ManagerOverview({
               title="Copy weekly team summary for Slack / email"
             >
               📋 Weekly Report
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Reset all data to demo state? This will erase any changes made during this session.",
-                  )
-                )
-                  onLoadDemo();
-              }}
-            >
-              <Download size={16} /> Reload Demo
             </button>
             <button
               className="ghost-button"
@@ -2731,45 +3431,6 @@ function ManagerOverview({
           )}
         </div>
 
-        {teamAnnouncement && (
-          <div className="team-announcement-banner">
-            <span>📢</span>
-            <span style={{ flex: 1 }}>{teamAnnouncement}</span>
-            <button
-              className="ghost-button"
-              style={{ fontSize: 11 }}
-              onClick={() => {
-                onSetAnnouncement?.("");
-                setAnnouncementDraft("");
-              }}
-            >
-              ✕ Clear
-            </button>
-          </div>
-        )}
-        <form
-          className="team-announcement-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSetAnnouncement?.(announcementDraft.trim());
-          }}
-        >
-          <input
-            value={announcementDraft}
-            onChange={(e) => setAnnouncementDraft(e.target.value)}
-            placeholder="📢 Post team announcement (visible to all CAMs)…"
-          />
-          {announcementDraft.trim() && (
-            <button
-              type="submit"
-              className="primary-button"
-              style={{ padding: "5px 12px", fontSize: 12 }}
-            >
-              Post
-            </button>
-          )}
-        </form>
-
         {showNewClient && (
           <section className="panel" style={{ maxWidth: 480 }}>
             <div className="panel-heading">
@@ -2864,6 +3525,15 @@ function ManagerOverview({
         )}
 
         {showSopBuilder && <SopBuilderPanel />}
+
+        {showDataTools && (
+          <DataToolsPanel
+            clients={clients}
+            camProfiles={camProfiles}
+            onImportClient={onImportClient}
+            session={session}
+          />
+        )}
 
         {showPipeline &&
           (() => {
@@ -3451,45 +4121,23 @@ function ManagerOverview({
               onChange={(e) => setNewCamName(e.target.value)}
               style={{ minWidth: 140 }}
             />
-            {showCamUserFields && (
-              <>
-                <input
-                  value={newCamUsername}
-                  placeholder="username"
-                  autoComplete="off"
-                  onChange={(e) => setNewCamUsername(e.target.value)}
-                  style={{ minWidth: 110 }}
-                />
-                <input
-                  type="password"
-                  value={newCamPassword}
-                  placeholder="password"
-                  autoComplete="new-password"
-                  onChange={(e) => setNewCamPassword(e.target.value)}
-                  style={{ minWidth: 110 }}
-                />
-              </>
-            )}
-            <button
-              type="button"
-              className="ghost-button"
-              style={{ fontSize: 11 }}
-              onClick={() => setShowCamUserFields((v) => !v)}
-            >
-              {showCamUserFields ? "− no login" : "+ login"}
-            </button>
             <button className="secondary-button" disabled={!newCamName.trim()}>
               <Plus size={14} /> Create
             </button>
           </form>
           <div className="cam-card-grid">
             {cams.map((cam) => (
-              <button
+              <div
                 className="cam-card live"
                 key={cam.id || cam.name}
-                onClick={() => onOpenCam(cam.id)}
               >
-                <strong>{cam.name}</strong>
+                <button
+                  className="cam-card-open"
+                  type="button"
+                  onClick={() => onOpenCam(cam.id)}
+                >
+                  <strong>{cam.name}</strong>
+                </button>
                 <span>
                   {cam.role} · {cam.status || "Active"}
                 </span>
@@ -3500,7 +4148,19 @@ function ManagerOverview({
                 <em className={cam.weeklyPnl >= 0 ? "positive" : "negative"}>
                   {formatCurrency(cam.weeklyPnl)} weekly
                 </em>
-              </button>
+                <label className="toggle-field cam-permission-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(cam.canManageClients)}
+                    onChange={(event) =>
+                      onUpdateCamProfile?.(cam.id, {
+                        canManageClients: event.target.checked,
+                      })
+                    }
+                  />
+                  <span>Create/delete clients</span>
+                </label>
+              </div>
             ))}
           </div>
         </section>
@@ -4924,11 +5584,70 @@ function MonthlyReportPanel({ client, month, onClose }) {
 }
 
 function ReportPanel({ client, dailyImport, onClose }) {
-  const report = buildDailyReportSummary(client, dailyImport);
+  const report = useMemo(() => buildDailyReportSummary(client, dailyImport), [client, dailyImport]);
   const [msgCopied, setMsgCopied] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("idle");
+  const [saveError, setSaveError] = useState("");
+  const [reportHistory, setReportHistory] = useState([]);
+  const savedReportKeyRef = useRef("");
+
+  const whatsappMessage = useMemo(
+    () => buildClientMessageReport(client, dailyImport),
+    [client, dailyImport],
+  );
+
+  useEffect(() => {
+    if (!client?.id || !dailyImport?.id) return;
+    const key = `${client.id}:${dailyImport.id}:daily_close`;
+    if (savedReportKeyRef.current === key) return;
+    savedReportKeyRef.current = key;
+
+    const content = {
+      title: `Daily close report - ${client.name || report.clientName} - ${report.date}`,
+      reportDate: report.date,
+      summary: report,
+      message: whatsappMessage,
+      source: {
+        clientId: client.id,
+        clientName: client.name || report.clientName,
+        dailyImportId: dailyImport.id,
+        dailyImportDate: dailyImport.date,
+        status: dailyImport.status,
+      },
+    };
+
+    setSaveStatus("saving");
+    setSaveError("");
+    createSupabaseReport(client.id, dailyImport.id, "daily_close", content)
+      .then((savedReport) => {
+        auditSilently({
+          entityType: "report",
+          entityId: savedReport?.id || null,
+          action: "report.generate",
+          afterData: {
+            clientId: client.id,
+            clientName: client.name || report.clientName,
+            dailyImportId: dailyImport.id,
+            reportDate: report.date,
+            reportType: "daily_close",
+          },
+        });
+        return savedReport;
+      })
+      .then(() => loadSupabaseReports(client.id, { limit: 5 }))
+      .then((history) => {
+        setReportHistory(history);
+        setSaveStatus("saved");
+      })
+      .catch((error) => {
+        console.error("[CRM] Failed to persist report:", error);
+        setSaveError(error.message || "Could not save report history.");
+        setSaveStatus("error");
+      });
+  }, [client, dailyImport, report, whatsappMessage]);
+
   function copyWhatsApp() {
-    const msg = buildClientMessageReport(client, dailyImport);
-    navigator.clipboard.writeText(msg).then(() => {
+    navigator.clipboard.writeText(whatsappMessage).then(() => {
       setMsgCopied(true);
       setTimeout(() => setMsgCopied(false), 2500);
     });
@@ -4977,16 +5696,36 @@ function ReportPanel({ client, dailyImport, onClose }) {
     <div className="report-overlay">
       <div className="report-sheet">
         <div className="report-actions no-print">
+          <span className={`remote-pill ${saveStatus === "error" ? "error" : saveStatus === "saved" ? "connected" : ""}`}>
+            {saveStatus === "saving"
+              ? "Saving report..."
+              : saveStatus === "saved"
+                ? "Saved to Supabase"
+                : saveStatus === "error"
+                  ? "Report not saved"
+                  : "Report history"}
+          </span>
           <button className="secondary-button" onClick={() => window.print()}>
             Print / Save PDF
           </button>
           <button className="ghost-button" onClick={copyWhatsApp}>
-            {msgCopied ? "✓ Copied!" : "📱 Copy for WhatsApp"}
+            {msgCopied ? (
+              "✓ Copied!"
+            ) : (
+              <>
+                <Smartphone size={14} /> Copy for WhatsApp
+              </>
+            )}
           </button>
           <button className="ghost-button" onClick={onClose}>
             Close
           </button>
         </div>
+        {saveStatus === "error" ? (
+          <div className="notice warning no-print" style={{ marginBottom: 12 }}>
+            {saveError}
+          </div>
+        ) : null}
 
         <header className="report-header">
           <div>
@@ -5122,6 +5861,34 @@ function ReportPanel({ client, dailyImport, onClose }) {
           </span>
           <span>Vincere Trading · Confidential</span>
         </footer>
+
+        {reportHistory.length ? (
+          <section className="report-section no-print">
+            <h2>Recent Saved Reports</h2>
+            <table className="report-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Saved</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportHistory.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.reportDate || item.content?.summary?.date || "—"}</td>
+                    <td>{item.reportType === "daily_close" ? "Daily close" : item.reportType}</td>
+                    <td>
+                      {item.createdAt
+                        ? new Date(item.createdAt).toLocaleString("en-US")
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
       </div>
     </div>
   );
@@ -5184,7 +5951,6 @@ function OnboardingChecklist({ client, onSwitchTab }) {
   const profile = client.profile || {};
   const creds = client.credentials || {};
   const registry = client.accountRegistry || {};
-  const tasks = client.tasks || [];
 
   const steps = [
     {
@@ -5435,7 +6201,7 @@ function ClientOverview({
           )}
           {profile.email && (
             <a href={`mailto:${profile.email}`} className="contact-chip">
-              <span>✉</span>
+              <Mail size={13} />
               {profile.email}
             </a>
           )}
@@ -5446,43 +6212,43 @@ function ClientOverview({
               rel="noreferrer"
               className="contact-chip"
             >
-              <span>{waLink ? "📱" : "📞"}</span>
+              {waLink ? <Smartphone size={13} /> : <Phone size={13} />}
               {profile.phone}
             </a>
           )}
           {profile.messenger && (
             <span className="contact-chip">
-              <span>💬</span>
+              <MessageCircle size={13} />
               {profile.messenger}
             </span>
           )}
           {profile.timezone && (
             <span className="contact-chip muted">
-              <span>🕐</span>
+              <Clock3 size={13} />
               {profile.timezone}
             </span>
           )}
           {profile.propFirm && (
             <span className="contact-chip muted">
-              <span>🏢</span>
+              <Building2 size={13} />
               {profile.propFirm}
             </span>
           )}
           {profile.preferredChannel && (
             <span className="contact-chip muted">
-              <span>💬</span>
+              <MessageCircle size={13} />
               {profile.preferredChannel}
             </span>
           )}
           {profile.country && (
             <span className="contact-chip muted">
-              <span>🌎</span>
+              <Globe2 size={13} />
               {profile.country}
             </span>
           )}
           {profile.language && (
             <span className="contact-chip muted">
-              <span>🌐</span>
+              <Languages size={13} />
               {{ en: "English", es: "Español" }[profile.language] ||
                 profile.language}
             </span>
@@ -6244,7 +7010,7 @@ export function remainingBuffer(s, m) {
   return ddLimit > 0 ? ddLimit - Math.abs(rawDD) : rawDD;
 }
 
-export function buildPortfolioInsights(clients, allClients = []) {
+export function buildPortfolioInsights(clients) {
   const insights = [];
   const today = todayIsoDate();
 
@@ -6540,7 +7306,6 @@ function CamOverview({
   allClients = [],
   strategySetRecords = [],
   strategySetIndexStatus,
-  camName = "",
   onSelectClient,
   onAddClientTask,
   onLogClientActivity,
@@ -6586,11 +7351,10 @@ function CamOverview({
     () => buildCamOverview(clients, strategySetRecords),
     [clients, strategySetRecords],
   );
-  const displayName = camName || "this workspace";
   const briefing = useMemo(() => buildTodayBriefing(clients), [clients]);
   const insights = useMemo(
-    () => buildPortfolioInsights(clients, allClients),
-    [clients, allClients],
+    () => buildPortfolioInsights(clients),
+    [clients],
   );
   const incomeProjection = useMemo(
     () => buildIncomeProjection(clients),
@@ -7380,7 +8144,7 @@ function CamOverview({
                             });
                           }}
                         >
-                          📞 Contacted
+                          <Phone size={13} /> Contacted
                         </button>
                       </div>
                     )}
@@ -8635,16 +9399,121 @@ function CopyButton({ value }) {
   );
 }
 
-function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
+const TIMEZONE_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Phoenix",
+  "America/Bogota",
+  "America/Mexico_City",
+  "America/Toronto",
+  "America/Vancouver",
+  "Europe/London",
+  "Europe/Madrid",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Asia/Jakarta",
+  "Australia/Sydney",
+];
+
+const COUNTRY_OPTIONS = [
+  "United States",
+  "Canada",
+  "Mexico",
+  "Colombia",
+  "Brazil",
+  "Argentina",
+  "Chile",
+  "Peru",
+  "United Kingdom",
+  "Spain",
+  "France",
+  "Germany",
+  "Italy",
+  "Netherlands",
+  "United Arab Emirates",
+  "Singapore",
+  "Indonesia",
+  "Australia",
+];
+
+function normalizeEmailList(emails = []) {
+  if (!Array.isArray(emails)) return [];
+  const seen = new Set();
+  return emails
+    .map((email) => String(email || "").trim())
+    .filter((email) => {
+      const key = email.toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function CredentialsTab({
+  client,
+  onUpdateClient,
+  onDeleteClient,
+  canDeleteClient = true,
+}) {
   const credentials = client.credentials || {};
   const profile = client.profile || {};
+  const propFirms = Array.isArray(client.propFirms) ? client.propFirms : [];
+  const additionalEmails = normalizeEmailList(profile.additionalEmails);
+  const countryListId = `country-options-${String(client?.id || "client").replace(/[^a-z0-9_-]/gi, "-")}`;
   const [showPasswords, setShowPasswords] = useState(false);
+  const [additionalEmailDraft, setAdditionalEmailDraft] = useState("");
 
   function updateProfile(patch) {
     onUpdateClient({ profile: { ...profile, ...patch } });
   }
   function updateCredentials(patch) {
     onUpdateClient({ credentials: { ...credentials, ...patch } });
+  }
+  function commitPropFirms(nextPropFirms) {
+    onUpdateClient({
+      propFirms: nextPropFirms.map((propFirm, index) => ({
+        ...propFirm,
+        sortOrder: index,
+      })),
+    });
+  }
+  function addPropFirm() {
+    commitPropFirms([
+      ...propFirms,
+      {
+        id: `local-${Date.now().toString(36)}`,
+        firmName: "",
+        connection: "Tradovate",
+        login: "",
+        password: "",
+        sortOrder: propFirms.length,
+      },
+    ]);
+  }
+  function updatePropFirm(id, patch) {
+    commitPropFirms(
+      propFirms.map((propFirm) =>
+        propFirm.id === id ? { ...propFirm, ...patch } : propFirm,
+      ),
+    );
+  }
+  function removePropFirm(id) {
+    commitPropFirms(propFirms.filter((propFirm) => propFirm.id !== id));
+  }
+  function addAdditionalEmail() {
+    const nextEmail = additionalEmailDraft.trim();
+    if (!nextEmail) return;
+    updateProfile({
+      additionalEmails: normalizeEmailList([...additionalEmails, nextEmail]),
+    });
+    setAdditionalEmailDraft("");
+  }
+  function removeAdditionalEmail(email) {
+    updateProfile({
+      additionalEmails: additionalEmails.filter((item) => item !== email),
+    });
   }
 
   return (
@@ -8664,7 +9533,7 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
             />
           </label>
           <label>
-            Email
+            Primary email
             <div className="input-copy-row">
               <input
                 type="email"
@@ -8684,12 +9553,55 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
                     textDecoration: "none",
                   }}
                 >
-                  ✉
+                  <Mail size={13} />
                 </a>
               )}
               <CopyButton value={profile.email} />
             </div>
           </label>
+          <div className="form-grid-wide form-field">
+            <span className="form-field-label">Additional emails</span>
+            <div className="email-chip-editor">
+              {additionalEmails.length > 0 && (
+                <div className="email-chip-list">
+                  {additionalEmails.map((email) => (
+                    <span className="email-chip" key={email}>
+                      {email}
+                      <button
+                        type="button"
+                        title={`Remove ${email}`}
+                        onClick={() => removeAdditionalEmail(email)}
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="input-copy-row">
+                <input
+                  type="email"
+                  value={additionalEmailDraft}
+                  placeholder="extra@email.com"
+                  onChange={(e) => setAdditionalEmailDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addAdditionalEmail();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={addAdditionalEmail}
+                  disabled={!additionalEmailDraft.trim()}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
           <label>
             Phone
             <div className="input-copy-row">
@@ -8711,7 +9623,7 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
                     textDecoration: "none",
                   }}
                 >
-                  📞
+                  <Phone size={13} />
                 </a>
               )}
               <CopyButton value={profile.phone} />
@@ -8719,26 +9631,35 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
           </label>
           <label>
             Time zone
-            <input
+            <select
               value={profile.timezone || ""}
-              placeholder="e.g. America/New_York"
               onChange={(e) => updateProfile({ timezone: e.target.value })}
-            />
+            >
+              <option value="">-- Not set --</option>
+              {TIMEZONE_OPTIONS.map((timezone) => (
+                <option value={timezone} key={timezone}>
+                  {timezone}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
-            Prop firm
-            <input
-              value={profile.propFirm || ""}
-              placeholder="e.g. Apex, TopStep, FTMO"
-              onChange={(e) => updateProfile({ propFirm: e.target.value })}
-            />
+            Product key
+            <div className="input-copy-row">
+              <input
+                value={profile.productKey || ""}
+                placeholder="Client product/license key"
+                onChange={(e) => updateProfile({ productKey: e.target.value })}
+              />
+              <CopyButton value={profile.productKey} />
+            </div>
           </label>
           <label>
-            Discord / Telegram
+            Discord username
             <div className="input-copy-row">
               <input
                 value={profile.messenger || ""}
-                placeholder="Handle or username"
+                placeholder="Discord username"
                 onChange={(e) => updateProfile({ messenger: e.target.value })}
               />
               <CopyButton value={profile.messenger} />
@@ -8767,7 +9688,6 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
             >
               <option value="">— Not set —</option>
               <option>WhatsApp</option>
-              <option>Telegram</option>
               <option>Email</option>
               <option>Discord</option>
               <option>Other</option>
@@ -8787,10 +9707,16 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
           <label>
             Country
             <input
+              list={countryListId}
               value={profile.country || ""}
               placeholder="e.g. Colombia, USA"
               onChange={(e) => updateProfile({ country: e.target.value })}
             />
+            <datalist id={countryListId}>
+              {COUNTRY_OPTIONS.map((country) => (
+                <option value={country} key={country} />
+              ))}
+            </datalist>
           </label>
           <label>
             Start date
@@ -8812,7 +9738,15 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
             style={{ marginLeft: "auto", fontSize: 12 }}
             onClick={() => setShowPasswords((v) => !v)}
           >
-            {showPasswords ? "🙈 Hide passwords" : "👁 Show passwords"}
+            {showPasswords ? (
+              <>
+                <EyeOff size={14} /> Hide passwords
+              </>
+            ) : (
+              <>
+                <Eye size={14} /> Show passwords
+              </>
+            )}
           </button>
         </div>
         <div className="form-grid">
@@ -8851,44 +9785,127 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
               <CopyButton value={credentials.password} />
             </div>
           </label>
-          <label>
-            NT login
-            <div className="input-copy-row">
-              <input
-                value={credentials.ntLogin || ""}
-                placeholder="NinjaTrader username"
-                onChange={(e) => updateCredentials({ ntLogin: e.target.value })}
-              />
-              <CopyButton value={credentials.ntLogin} />
+          <div className="form-grid-wide form-field">
+            <span className="form-field-label">NinjaTrader</span>
+            <div className="paired-field-row">
+              <div className="paired-field">
+                <span>Username</span>
+                <div className="input-copy-row">
+                  <input
+                    value={credentials.ntLogin || ""}
+                    placeholder="NinjaTrader username"
+                    onChange={(e) =>
+                      updateCredentials({ ntLogin: e.target.value })
+                    }
+                  />
+                  <CopyButton value={credentials.ntLogin} />
+                </div>
+              </div>
+              <div className="paired-field">
+                <span>Password</span>
+                <div className="input-copy-row">
+                  <input
+                    type={showPasswords ? "text" : "password"}
+                    value={credentials.ntPassword || ""}
+                    onChange={(e) =>
+                      updateCredentials({ ntPassword: e.target.value })
+                    }
+                  />
+                  <CopyButton value={credentials.ntPassword} />
+                </div>
+              </div>
             </div>
-          </label>
-          <label>
-            Prop firm login
-            <div className="input-copy-row">
-              <input
-                value={credentials.firmLogin || ""}
-                placeholder="Dashboard login email"
-                onChange={(e) =>
-                  updateCredentials({ firmLogin: e.target.value })
-                }
-              />
-              <CopyButton value={credentials.firmLogin} />
-            </div>
-          </label>
-          <label>
-            Prop firm password
-            <div className="input-copy-row">
-              <input
-                type={showPasswords ? "text" : "password"}
-                value={credentials.firmPassword || ""}
-                onChange={(e) =>
-                  updateCredentials({ firmPassword: e.target.value })
-                }
-              />
-              <CopyButton value={credentials.firmPassword} />
-            </div>
-          </label>
+          </div>
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <h3>Prop firms</h3>
+          <button className="ghost-button" type="button" onClick={addPropFirm}>
+            <Plus size={14} /> Add firm
+          </button>
+        </div>
+        {propFirms.length ? (
+          <div className="prop-firm-list">
+            {propFirms.map((propFirm, index) => (
+              <div className="prop-firm-row" key={propFirm.id || index}>
+                <div className="prop-firm-row-head">
+                  <strong>Firm {index + 1}</strong>
+                  <div className="segmented-control">
+                    {["Tradovate", "Rithmic"].map((connection) => (
+                      <button
+                        type="button"
+                        key={connection}
+                        className={propFirm.connection === connection ? "active" : ""}
+                        onClick={() => updatePropFirm(propFirm.id, { connection })}
+                      >
+                        {connection}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className="ghost-button icon-only"
+                    type="button"
+                    title="Remove prop firm"
+                    onClick={() => removePropFirm(propFirm.id)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="form-grid prop-firm-grid">
+                  <label>
+                    Firm name
+                    <input
+                      value={propFirm.firmName || ""}
+                      placeholder="e.g. Apex, TopStep"
+                      onChange={(e) =>
+                        updatePropFirm(propFirm.id, { firmName: e.target.value })
+                      }
+                    />
+                  </label>
+                  <div className="form-grid-wide form-field">
+                    <span className="form-field-label">Prop firm access</span>
+                    <div className="paired-field-row">
+                      <div className="paired-field">
+                        <span>Login</span>
+                        <div className="input-copy-row">
+                          <input
+                            value={propFirm.login || ""}
+                            placeholder="Dashboard login email"
+                            onChange={(e) =>
+                              updatePropFirm(propFirm.id, {
+                                login: e.target.value,
+                              })
+                            }
+                          />
+                          <CopyButton value={propFirm.login} />
+                        </div>
+                      </div>
+                      <div className="paired-field">
+                        <span>Password</span>
+                        <div className="input-copy-row">
+                          <input
+                            type={showPasswords ? "text" : "password"}
+                            value={propFirm.password || ""}
+                            onChange={(e) =>
+                              updatePropFirm(propFirm.id, {
+                                password: e.target.value,
+                              })
+                            }
+                          />
+                          <CopyButton value={propFirm.password} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No prop firms added.</p>
+        )}
       </section>
 
       <section className="panel">
@@ -8903,41 +9920,43 @@ function CredentialsTab({ client, onUpdateClient, onDeleteClient }) {
         />
       </section>
 
-      <section
-        className="panel"
-        style={{ borderColor: "var(--red)", opacity: 0.8 }}
-      >
-        <div className="panel-heading">
-          <h3>Danger zone</h3>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "4px 0",
-          }}
+      {canDeleteClient ? (
+        <section
+          className="panel"
+          style={{ borderColor: "var(--red)", opacity: 0.8 }}
         >
-          <div>
-            <strong style={{ fontSize: 13 }}>Remove client</strong>
-            <p className="muted" style={{ fontSize: 12, margin: "2px 0 0" }}>
-              Permanently deletes all data for this client. Export a backup
-              first.
-            </p>
+          <div className="panel-heading">
+            <h3>Danger zone</h3>
           </div>
-          <button
-            className="secondary-button"
+          <div
             style={{
-              color: "var(--red)",
-              borderColor: "var(--red)",
-              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "4px 0",
             }}
-            onClick={onDeleteClient}
           >
-            <Trash2 size={13} /> Remove client
-          </button>
-        </div>
-      </section>
+            <div>
+              <strong style={{ fontSize: 13 }}>Remove client</strong>
+              <p className="muted" style={{ fontSize: 12, margin: "2px 0 0" }}>
+                Permanently deletes all data for this client. Confirm the data is
+                no longer needed before deleting.
+              </p>
+            </div>
+            <button
+              className="secondary-button"
+              style={{
+                color: "var(--red)",
+                borderColor: "var(--red)",
+                flexShrink: 0,
+              }}
+              onClick={onDeleteClient}
+            >
+              <Trash2 size={13} /> Remove client
+            </button>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -9231,8 +10250,8 @@ function PinnedNote({ note, onSave }) {
 }
 
 export default function App() {
-  const [state, setState] = useState(() => loadDemoState());
-  const [users, setUsers] = useState(() => loadUsers());
+  const [state, setState] = useState(() => createInitialState());
+  const [users, setUsers] = useState([]);
   const [remoteStatus, setRemoteStatus] = useState(() =>
     isSupabaseConfigured
       ? {
@@ -9240,7 +10259,11 @@ export default function App() {
           status: "loading",
           message: "Connecting to Supabase...",
         }
-      : { source: "local", status: "idle", message: "Local demo mode" },
+      : {
+          source: "supabase",
+          status: "error",
+          message: "Supabase environment is required.",
+        },
   );
   const [session, setSession] = useState(() => {
     try {
@@ -9269,40 +10292,27 @@ export default function App() {
   const [platformView, setPlatformView] = useState("manager");
   // On mount: if session was restored, re-validate and restore workspace
   useEffect(() => {
-    if (isSupabaseConfigured) {
-      getSupabaseSessionAppUser()
-        .then((fresh) => {
-          if (!fresh) {
-            persistSession(null);
-            return;
-          }
-          persistSession(fresh);
-          if (fresh.role === USER_ROLES.CAM && fresh.camProfileId) {
-            openCamWorkspace(fresh.camProfileId);
-          } else {
-            setPlatformView("manager");
-          }
-        })
-        .catch((err) => {
-          console.error("[CRM] Supabase session restore failed:", err);
-          persistSession(null);
-        });
+    if (!isSupabaseConfigured) {
+      persistSession(null);
       return;
     }
-    if (session) {
-      const live = (users || []).find((u) => u.id === session.id);
-      if (!live) {
+    getSupabaseSessionAppUser()
+      .then((fresh) => {
+        if (!fresh) {
+          persistSession(null);
+          return;
+        }
+        persistSession(fresh);
+        if (fresh.role === USER_ROLES.CAM && fresh.camProfileId) {
+          openCamWorkspace(fresh.camProfileId);
+        } else {
+          openManagerWorkspace();
+        }
+      })
+      .catch((err) => {
+        console.error("[CRM] Supabase session restore failed:", err);
         persistSession(null);
-        return;
-      } // user deleted
-      const fresh = { ...live };
-      persistSession(fresh);
-      if (fresh.role === USER_ROLES.CAM && fresh.camProfileId) {
-        openCamWorkspace(fresh.camProfileId);
-      } else {
-        setPlatformView("manager");
-      }
-    }
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [newClientName, setNewClientName] = useState("");
@@ -9367,7 +10377,7 @@ export default function App() {
         if (cancelled) return;
         console.error("[CRM] Supabase load failed:", error);
         setRemoteStatus({
-          source: "local",
+          source: "supabase",
           status: "error",
           message: `Supabase unavailable: ${error.message}`,
         });
@@ -9377,6 +10387,27 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function reloadSupabaseState(preferredCamProfileId = null, selectedClientId = null) {
+    if (!isSupabaseConfigured) return null;
+    const remoteState = await loadSupabaseCrmState({
+      preferredCamProfileId:
+        preferredCamProfileId ||
+        session?.camProfileId ||
+        state.accountManager?.id ||
+        "am-pedro",
+    });
+    const nextState = selectedClientId
+      ? selectClient(remoteState, selectedClientId)
+      : remoteState;
+    setState(nextState);
+    setRemoteStatus({
+      source: "supabase",
+      status: "connected",
+      message: "Connected to Supabase",
+    });
+    return nextState;
+  }
 
   useEffect(() => {
     function onKey(e) {
@@ -9390,9 +10421,6 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  useEffect(() => saveDemoState(state), [state]);
-  useEffect(() => saveUsers(users), [users]);
 
   useEffect(() => {
     function onKey(e) {
@@ -9471,10 +10499,11 @@ export default function App() {
     null;
   const currentCamClients = clientsForCam(state.clients, currentCamProfile);
   const isManagerSession = session?.role === USER_ROLES.MANAGER;
+  const canCreateDeleteClients =
+    isManagerSession || Boolean(currentCamProfile?.canManageClients);
   const accessibleClients = isManagerSession
     ? state.clients || []
     : currentCamClients;
-  const showDemoBanner = isLikelyDemoData(state);
   const selectedClient =
     currentCamClients.find((client) => client.id === state.selectedClientId) ||
     currentCamClients[0] ||
@@ -9512,12 +10541,35 @@ export default function App() {
 
   function handleAddClient(event) {
     event.preventDefault();
+    if (!canCreateDeleteClients) {
+      window.alert("This CAM does not have permission to create clients. Ask a Manager to enable client management access.");
+      return;
+    }
+    const clientName = newClientName.trim();
+    if (!clientName) return;
+    const targetCamId = currentCamProfile?.id || state.accountManager?.id || null;
     setState((current) =>
-      addClient(current, newClientName, current.accountManager?.id),
+      addClient(current, clientName, current.accountManager?.id),
     );
     setNewClientName("");
     setShowOverview(false);
     setShowSOP(false);
+    if (isSupabaseConfigured) {
+      createSupabaseClient(clientName, targetCamId, "Active")
+        .then((savedClient) => {
+          auditSilently({
+            entityType: "client",
+            entityId: savedClient?.id || null,
+            action: "client.create",
+            afterData: { clientName, camProfileId: targetCamId, stage: "Active" },
+          });
+          return reloadSupabaseState(targetCamId);
+        })
+        .catch((error) => {
+          console.error("[CRM] Failed to create client:", error);
+          window.alert(`Could not save client "${clientName}" to Supabase: ${error.message}`);
+        });
+    }
   }
 
   function openCamWorkspace(camId = "am-pedro", clientId = null) {
@@ -9529,52 +10581,21 @@ export default function App() {
     setShowOverview(false);
     setShowSOP(false);
     setRegistryOpen(false);
+    if (isSupabaseConfigured) {
+      reloadSupabaseState(camId, clientId).catch((error) => {
+        console.error("[CRM] Failed to refresh CAM workspace:", error);
+      });
+    }
   }
 
-  function handleExport() {
-    let sopStreak = null;
-    try {
-      sopStreak = JSON.parse(localStorage.getItem("cam-sop-streak") || "null");
-    } catch {}
-    const blob = new Blob(
-      [JSON.stringify({ ...state, _sopStreak: sopStreak }, null, 2)],
-      { type: "application/json" },
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = exportFileName();
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleImport(event) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (
-      !window.confirm(
-        `Import "${file.name}"? This will replace all current data.`,
-      )
-    )
-      return;
-    try {
-      const text = await file.text();
-      const raw = JSON.parse(text);
-      if (raw._sopStreak) {
-        try {
-          localStorage.setItem(
-            "cam-sop-streak",
-            JSON.stringify(raw._sopStreak),
-          );
-        } catch {}
-      }
-      const imported = parseImportedState(text);
-      setState(imported);
-      setShowOverview(false);
-      setShowSOP(false);
-    } catch (err) {
-      window.alert(err?.message || "Could not import this file.");
+  function openManagerWorkspace() {
+    setPlatformView("manager");
+    setShowOverview(false);
+    setShowSOP(false);
+    if (isSupabaseConfigured) {
+      reloadSupabaseState(null).catch((error) => {
+        console.error("[CRM] Failed to refresh manager workspace:", error);
+      });
     }
   }
 
@@ -9586,10 +10607,35 @@ export default function App() {
       registry: selectedClient.accountRegistry,
       parsed,
     });
-    setState((current) =>
-      appendDailyImport(current, selectedClient.id, result),
-    );
+    persistDailyImport(selectedClient.id, result);
     setShowUpload(false);
+  }
+
+  function persistDailyImport(clientId, result) {
+    setState((current) => appendDailyImport(current, clientId, result));
+    if (!isSupabaseConfigured) return Promise.resolve(null);
+    return upsertSupabaseDailyImport(clientId, result)
+      .then((savedImport) => {
+        auditSilently({
+          entityType: "daily_import",
+          entityId: savedImport?.id || null,
+          action: "daily_import.upsert",
+          afterData: {
+            clientId,
+            reportDate: result.date,
+            status: result.status,
+            accountCount: Object.keys(result.accounts || {}).length,
+            snapshotCount: (result.snapshots || []).length,
+            flagCount: (result.flags || []).length,
+          },
+        });
+        return reloadSupabaseState(state.accountManager?.id);
+      })
+      .catch((error) => {
+        console.error("[CRM] Failed to save daily import:", error);
+        window.alert(`Could not save daily import to Supabase: ${error.message}`);
+        return null;
+      });
   }
 
   function handleAccountUpdate(accountName, patch) {
@@ -9601,7 +10647,14 @@ export default function App() {
     setState((current) =>
       upsertAccountMeta(current, clientId, accountName, patch),
     );
-    updateSupabaseTradingAccount(clientId, accountName, patch).catch(
+    updateSupabaseTradingAccount(clientId, accountName, patch).then(() => {
+      auditSilently({
+        entityType: "trading_account",
+        entityId: accountName,
+        action: "account.update",
+        afterData: { clientId, accountName, patch },
+      });
+    }).catch(
       (error) => {
         console.error("[CRM] Failed to update trading account:", error);
         window.alert(
@@ -9640,6 +10693,20 @@ export default function App() {
           dateLastPayout: entry.date,
         }),
       )
+      .then(() => {
+        auditSilently({
+          entityType: "payout_event",
+          entityId: accountName,
+          action: "payout.create",
+          afterData: {
+            clientId: selectedClient.id,
+            clientName: selectedClient.name,
+            accountName,
+            amount: entry.amount,
+            date: entry.date,
+          },
+        });
+      })
       .catch((error) => {
         console.error("[CRM] Failed to log payout:", error);
         window.alert(
@@ -9653,17 +10720,68 @@ export default function App() {
     setState((current) =>
       updateClientDetails(current, selectedClient.id, patch),
     );
+    if (!isSupabaseConfigured) return;
+
+    const { priceChecks, priceChecksDate, ...clientPatch } = patch;
+    const writes = [];
+    if (Object.keys(clientPatch).length) {
+      writes.push(updateSupabaseClient(selectedClient.id, clientPatch));
+    }
+    if ("priceChecks" in patch) {
+      writes.push(
+        replaceSupabasePriceChecks(
+          selectedClient.id,
+          priceChecks || [],
+          priceChecksDate || todayIsoDate(),
+        ),
+      );
+    }
+    Promise.all(writes).then(() => {
+      auditSilently({
+        entityType: "client",
+        entityId: selectedClient.id,
+        action: "client.update",
+        beforeData: { clientName: selectedClient.name },
+        afterData: {
+          clientId: selectedClient.id,
+          clientName: selectedClient.name,
+          changedFields: Object.keys(patch || {}),
+        },
+      });
+    }).catch((error) => {
+      console.error("[CRM] Failed to update client:", error);
+      window.alert(`Could not save client "${selectedClient.name}" to Supabase: ${error.message}`);
+    });
   }
 
   function handleDeleteClient() {
     if (!selectedClient) return;
+    if (!canCreateDeleteClients) {
+      window.alert("This CAM does not have permission to delete clients. Ask a Manager to enable client management access.");
+      return;
+    }
     if (
       !window.confirm(
-        `Remove "${selectedClient.name}" from this workspace? This cannot be undone. Export a backup first if you need the data.`,
+        `Remove "${selectedClient.name}" from this workspace? This cannot be undone. Confirm the data is no longer needed before deleting.`,
       )
     )
       return;
     setState((current) => removeClient(current, selectedClient.id));
+    softDeleteSupabaseClient(selectedClient.id)
+      .then(() => {
+        auditSilently({
+          entityType: "client",
+          entityId: selectedClient.id,
+          action: "client.deactivate",
+          beforeData: { clientName: selectedClient.name, status: selectedClient.status },
+          afterData: { clientId: selectedClient.id, clientName: selectedClient.name, status: "Inactive" },
+        });
+        return reloadSupabaseState(currentCamProfile?.id || state.accountManager?.id);
+      })
+      .catch((error) => {
+        console.error("[CRM] Failed to delete client:", error);
+        window.alert(`Could not deactivate "${selectedClient.name}" in Supabase: ${error.message}`);
+      });
   }
 
   function handleResolveFlag(flagId, status = "Resolved") {
@@ -9691,7 +10809,21 @@ export default function App() {
       if (entry) next = addActivityEntry(next, selectedClient.id, entry);
       return next;
     });
-    updateSupabaseOperationalFlag(flagId, status).catch((error) => {
+    updateSupabaseOperationalFlag(flagId, status).then(() => {
+      auditSilently({
+        entityType: "operational_flag",
+        entityId: flagId,
+        action: status === "Resolved" ? "flag.resolve" : "flag.acknowledge",
+        beforeData: flag ? { status: flag.status || "Open", type: flag.type } : null,
+        afterData: {
+          clientId: selectedClient.id,
+          clientName: selectedClient.name,
+          dailyImportId: dailyImport.id,
+          flagId,
+          status,
+        },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to update flag:", error);
       window.alert(`Could not update flag in Supabase: ${error.message}`);
     });
@@ -9732,6 +10864,20 @@ export default function App() {
       openFlags.map((flag) => updateSupabaseOperationalFlag(flag.id, status)),
     )
       .then(() => insertSupabaseActivity(selectedClient.id, entry))
+      .then(() => {
+        auditSilently({
+          entityType: "operational_flag",
+          entityId: dailyImport.id,
+          action: status === "Resolved" ? "flag.bulk_resolve" : "flag.bulk_acknowledge",
+          afterData: {
+            clientId: selectedClient.id,
+            clientName: selectedClient.name,
+            dailyImportId: dailyImport.id,
+            flagCount: openFlags.length,
+            status,
+          },
+        });
+      })
       .catch((error) => {
         console.error("[CRM] Failed to bulk update flags:", error);
         window.alert(`Could not update flags in Supabase: ${error.message}`);
@@ -9748,7 +10894,14 @@ export default function App() {
     setState((current) =>
       deleteActivityEntry(current, selectedClient.id, entryId),
     );
-    deleteSupabaseActivity(entryId).catch((error) => {
+    deleteSupabaseActivity(entryId).then(() => {
+      auditSilently({
+        entityType: "activity_log",
+        entityId: entryId,
+        action: "activity.delete",
+        afterData: { clientId: selectedClient.id, clientName: selectedClient.name, entryId },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to delete activity:", error);
       window.alert(`Could not delete activity from Supabase: ${error.message}`);
     });
@@ -9764,7 +10917,14 @@ export default function App() {
     setState((current) =>
       updateTask(current, selectedClient.id, taskId, patch),
     );
-    updateSupabaseTask(taskId, patch).catch((error) => {
+    updateSupabaseTask(taskId, patch).then(() => {
+      auditSilently({
+        entityType: "task",
+        entityId: taskId,
+        action: "task.update",
+        afterData: { clientId: selectedClient.id, clientName: selectedClient.name, taskId, patch },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to update task:", error);
       window.alert(`Could not save task to Supabase: ${error.message}`);
     });
@@ -9773,7 +10933,14 @@ export default function App() {
   function handleDeleteTask(taskId) {
     if (!selectedClient) return;
     setState((current) => deleteTask(current, selectedClient.id, taskId));
-    deleteSupabaseTask(taskId).catch((error) => {
+    deleteSupabaseTask(taskId).then(() => {
+      auditSilently({
+        entityType: "task",
+        entityId: taskId,
+        action: "task.delete",
+        afterData: { clientId: selectedClient.id, clientName: selectedClient.name, taskId },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to delete task:", error);
       window.alert(`Could not delete task from Supabase: ${error.message}`);
     });
@@ -9781,7 +10948,14 @@ export default function App() {
 
   function persistActivity(clientId, entry) {
     setState((current) => addActivityEntry(current, clientId, entry));
-    insertSupabaseActivity(clientId, entry).catch((error) => {
+    insertSupabaseActivity(clientId, entry).then(() => {
+      auditSilently({
+        entityType: "activity_log",
+        entityId: entry.id,
+        action: "activity.create",
+        afterData: { clientId, ...entry },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to save activity:", error);
       window.alert(`Could not save activity to Supabase: ${error.message}`);
     });
@@ -9789,7 +10963,14 @@ export default function App() {
 
   function persistTask(clientId, task) {
     setState((current) => addTask(current, clientId, task));
-    insertSupabaseTask(clientId, task).catch((error) => {
+    insertSupabaseTask(clientId, task).then(() => {
+      auditSilently({
+        entityType: "task",
+        entityId: task.id,
+        action: "task.create",
+        afterData: { clientId, ...task },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to save task:", error);
       window.alert(`Could not save task to Supabase: ${error.message}`);
     });
@@ -9857,7 +11038,15 @@ export default function App() {
     setState((current) =>
       updateImportStatus(current, selectedClient.id, dailyImport.id, "Closed"),
     );
-    updateSupabaseDailyImportStatus(dailyImport.id, "Closed").catch((error) => {
+    updateSupabaseDailyImportStatus(dailyImport.id, "Closed").then(() => {
+      auditSilently({
+        entityType: "daily_import",
+        entityId: dailyImport.id,
+        action: "daily_import.close",
+        beforeData: { status: dailyImport.status },
+        afterData: { clientId: selectedClient.id, clientName: selectedClient.name, dailyImportId: dailyImport.id, status: "Closed" },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to close day:", error);
       window.alert(`Could not close day in Supabase: ${error.message}`);
     });
@@ -9879,7 +11068,15 @@ export default function App() {
         "Needs review",
       ),
     );
-    updateSupabaseDailyImportStatus(dailyImport.id, "Needs review").catch(
+    updateSupabaseDailyImportStatus(dailyImport.id, "Needs review").then(() => {
+      auditSilently({
+        entityType: "daily_import",
+        entityId: dailyImport.id,
+        action: "daily_import.reopen",
+        beforeData: { status: dailyImport.status },
+        afterData: { clientId: selectedClient.id, clientName: selectedClient.name, dailyImportId: dailyImport.id, status: "Needs review" },
+      });
+    }).catch(
       (error) => {
         console.error("[CRM] Failed to reopen day:", error);
         window.alert(`Could not reopen day in Supabase: ${error.message}`);
@@ -9928,7 +11125,18 @@ export default function App() {
           ? updateSupabaseDailyImportStatus(imp.id, "Closed")
           : Promise.resolve();
       }),
-    ).catch((error) => {
+    ).then(() => {
+      auditSilently({
+        entityType: "daily_import",
+        entityId: null,
+        action: "daily_import.bulk_close",
+        afterData: {
+          closeDate: today,
+          clientCount: toClose.length,
+          clientIds: toClose.map((client) => client.id),
+        },
+      });
+    }).catch((error) => {
       console.error("[CRM] Failed to close all today:", error);
       window.alert(`Could not close all days in Supabase: ${error.message}`);
     });
@@ -9950,6 +11158,18 @@ export default function App() {
       recalculated.status,
     )
       .then((savedFlags) => {
+        auditSilently({
+          entityType: "daily_import",
+          entityId: dailyImport.id,
+          action: "daily_import.recalculate_flags",
+          afterData: {
+            clientId: selectedClient.id,
+            clientName: selectedClient.name,
+            dailyImportId: dailyImport.id,
+            flagCount: savedFlags.length,
+            status: recalculated.status,
+          },
+        });
         setState((current) =>
           replaceDailyImport(current, selectedClient.id, {
             ...recalculated,
@@ -9970,13 +11190,12 @@ export default function App() {
   if (!session) {
     return (
       <LoginScreen
-        users={users}
         onLogin={(user) => {
           persistSession(user);
           if (user.role === USER_ROLES.CAM && user.camProfileId) {
             openCamWorkspace(user.camProfileId);
           } else {
-            setPlatformView("manager");
+            openManagerWorkspace();
           }
         }}
       />
@@ -9994,68 +11213,91 @@ export default function App() {
           clients={state.clients}
           camProfiles={state.camProfiles}
           onOpenCam={openCamWorkspace}
-          onLoadDemo={() => setState(createDemoState())}
-          onCreateCam={(name, username, password) => {
-            const profileId = `am-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-            setState((current) => {
-              const profile = {
-                id: profileId,
-                name,
-                status: "Active",
-                role: "Account Manager",
-                clientIds: [],
-              };
-              return {
-                ...current,
-                camProfiles: [...(current.camProfiles || []), profile],
-              };
-            });
-            if (username && password) {
-              const already = (users || []).find(
-                (u) => u.username?.toLowerCase() === username.toLowerCase(),
-              );
-              if (!already)
-                setUsers((u) =>
-                  addUser(u, {
-                    username,
-                    password,
-                    displayName: name,
-                    email: "",
-                    role: USER_ROLES.CAM,
-                    camProfileId: profileId,
-                  }),
-                );
-            }
+          onCreateCam={(name) => {
+            createSupabaseCamProfile(name)
+              .then((savedProfile) => {
+                auditSilently({
+                  entityType: "cam_profile",
+                  entityId: savedProfile?.id || null,
+                  action: "cam_profile.create",
+                  afterData: { name },
+                });
+                return reloadSupabaseState();
+              })
+              .catch((error) => {
+                console.error("[CRM] Failed to create CAM profile:", error);
+                window.alert(`Could not save CAM profile to Supabase: ${error.message}`);
+              });
+          }}
+          onUpdateCamProfile={(camProfileId, patch) => {
+            setState((current) => ({
+              ...current,
+              camProfiles: (current.camProfiles || []).map((profile) =>
+                profile.id === camProfileId ? { ...profile, ...patch } : profile,
+              ),
+            }));
+            updateSupabaseCamProfile(camProfileId, patch)
+              .then(() => {
+                auditSilently({
+                  entityType: "cam_profile",
+                  entityId: camProfileId,
+                  action: "cam_profile.permissions.update",
+                  afterData: { camProfileId, patch, source: "manager" },
+                });
+              })
+              .catch((error) => {
+                console.error("[CRM] Failed to update CAM permissions:", error);
+                window.alert(`Could not save CAM permission to Supabase: ${error.message}`);
+              });
           }}
           onLogout={handleLogout}
           users={users}
           onUsersChange={setUsers}
           session={session}
           onUpdateClientAccount={persistAccountUpdate}
-          onTransferClient={(clientId, toCamId) =>
-            setState((current) => transferClient(current, clientId, toCamId))
-          }
-          teamAnnouncement={state.teamAnnouncement || ""}
-          onSetAnnouncement={(msg) =>
-            setState((s) => ({ ...s, teamAnnouncement: msg }))
-          }
+          onTransferClient={(clientId, toCamId) => {
+            setState((current) => transferClient(current, clientId, toCamId));
+            transferSupabaseClient(clientId, toCamId)
+              .then(() => {
+                auditSilently({
+                  entityType: "client_assignment",
+                  entityId: clientId,
+                  action: "client.transfer",
+                  afterData: { clientId, toCamId },
+                });
+                return reloadSupabaseState(toCamId);
+              })
+              .catch((error) => {
+                console.error("[CRM] Failed to transfer client:", error);
+                window.alert(`Could not transfer client in Supabase: ${error.message}`);
+              });
+          }}
           onResolveFlag={(clientId, importId, flagId, status = "Resolved") => {
             setState((current) =>
               resolveFlagInImport(current, clientId, importId, flagId, status),
             );
-            updateSupabaseOperationalFlag(flagId, status).catch((error) => {
+            updateSupabaseOperationalFlag(flagId, status).then(() => {
+              auditSilently({
+                entityType: "operational_flag",
+                entityId: flagId,
+                action: status === "Resolved" ? "flag.resolve" : "flag.acknowledge",
+                afterData: { clientId, importId, flagId, status, source: "manager" },
+              });
+            }).catch((error) => {
               console.error("[CRM] Failed to update manager flag:", error);
               window.alert(
                 `Could not update flag in Supabase: ${error.message}`,
               );
             });
           }}
-          onAddClient={(name, camId, stage) =>
+          onAddClient={(name, camId, stage) => {
+            const clientName = String(name || "").trim();
+            if (!clientName) return;
             setState((current) => {
-              const withClient = addClient(current, name, camId || null);
+              const withClient = addClient(current, clientName, camId || null);
               const newClient = withClient.clients.find(
                 (c) =>
-                  c.name === name &&
+                  c.name === clientName &&
                   !current.clients.find((x) => x.id === c.id),
               );
               if (newClient && stage && stage !== "Active") {
@@ -10069,10 +11311,54 @@ export default function App() {
                 };
               }
               return withClient;
-            })
-          }
+            });
+            createSupabaseClient(clientName, camId || null, stage || "Active")
+              .then((savedClient) => {
+                auditSilently({
+                  entityType: "client",
+                  entityId: savedClient?.id || null,
+                  action: "client.create",
+                  afterData: { clientName, camProfileId: camId || null, stage: stage || "Active", source: "manager" },
+                });
+                return reloadSupabaseState(camId || null);
+              })
+              .catch((error) => {
+                console.error("[CRM] Failed to create manager client:", error);
+                window.alert(`Could not save client "${clientName}" to Supabase: ${error.message}`);
+              });
+          }}
+          onImportClient={async (row, camId) => {
+            const savedClient = await createSupabaseClient(row.name, camId || null, row.stage || "Active");
+            await updateSupabaseClient(savedClient.id, {
+              profile: {
+                stage: row.stage || "Active",
+                fullName: row.name,
+                email: row.email,
+                additionalEmails: row.additionalEmails || [],
+                phone: row.phone,
+                timezone: row.timezone,
+                country: row.country,
+                startDate: row.startDate,
+                preferredChannel: row.preferredChannel,
+                language: row.language,
+                productKey: row.productKey,
+                propFirm: row.propFirm,
+                messenger: row.messenger,
+              },
+              credentials: row.credentials || undefined,
+              propFirms: row.propFirms || [],
+              notes: row.notes,
+            });
+            auditSilently({
+              entityType: "client",
+              entityId: savedClient.id,
+              action: "client.import",
+              afterData: { ...row, camProfileId: camId || null },
+            });
+            await reloadSupabaseState(camId || null);
+          }}
           onAppendDailyImport={(clientId, result) =>
-            setState((current) => appendDailyImport(current, clientId, result))
+            persistDailyImport(clientId, result)
           }
         />
       </ErrorBoundary>
@@ -10110,137 +11396,68 @@ export default function App() {
                   ? "Supabase"
                   : remoteStatus.status === "loading"
                     ? "Connecting..."
-                    : "Local"}
+                    : "Supabase required"}
               </small>
               <div className="backup-actions">
                 {isManagerSession ? (
                   <button
                     className="ghost-button"
-                    onClick={() => setPlatformView("manager")}
+                    onClick={openManagerWorkspace}
                   >
                     <Users size={14} /> Team
                   </button>
                 ) : null}
-                <button className="ghost-button" onClick={handleExport}>
-                  <Download size={14} /> Export
-                </button>
-                <label className="ghost-button">
-                  <Upload size={14} /> Import
-                  <input
-                    type="file"
-                    accept=".json,application/json"
-                    hidden
-                    onChange={handleImport}
-                  />
-                </label>
               </div>
-              {(() => {
-                const kb = getStorageUsageKB();
-                const pct = Math.min(100, Math.round(kb / 50));
-                return kb > 1000 ? (
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: kb > 4000 ? "var(--negative)" : "var(--warning)",
-                      padding: "2px 4px",
-                    }}
-                    title={`${kb} KB used of ~5120 KB limit`}
-                  >
-                    ⚠ Storage: {Math.round((kb / 1024) * 10) / 10} MB / ~5 MB
-                    {kb > 4000 ? " — export backup now!" : ""}
-                  </div>
-                ) : null;
-              })()}
             </div>
-            <form className="client-form" onSubmit={handleAddClient}>
-              <input
-                value={newClientName}
-                placeholder="New client"
-                onChange={(event) => setNewClientName(event.target.value)}
-              />
-              <button>
-                <Plus size={16} />
-              </button>
-            </form>
-            <button
-              className="global-search-trigger"
-              onClick={() => {
-                setGlobalSearchOpen(true);
-                setGlobalSearchQuery("");
-              }}
-              title={
-                isManagerSession
-                  ? "Search all clients (⌘K)"
-                  : "Search your clients (⌘K)"
-              }
-            >
-              <span>
-                {isManagerSession ? "⌕ Search all…" : "⌕ Search clients…"}
-              </span>
-              <kbd>⌘K</kbd>
-            </button>
-            <input
-              className="client-search"
-              value={clientSearch}
-              placeholder="Filter sidebar..."
-              onChange={(e) => setClientSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  setClientSearch("");
-                } else if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  const list = e.currentTarget
-                    .closest("aside")
-                    ?.querySelectorAll(".client-link");
-                  if (list?.length) list[0].focus();
-                }
-              }}
-            />
-            {showDemoBanner && (
-              <div
-                className="demo-banner"
-                style={{
-                  margin: "6px 0",
-                  padding: "8px 10px",
-                  background: "var(--yellow-bg,rgba(245,200,60,0.12))",
-                  border: "1px solid var(--yellow,#e6b800)",
-                  borderRadius: 6,
-                  fontSize: 12,
-                  lineHeight: 1.45,
-                }}
-              >
-                <strong style={{ display: "block", marginBottom: 3 }}>
-                  🎯 Demo data loaded
-                </strong>
-                <span className="muted">
-                  Replace with your real clients or&nbsp;
-                </span>
-                <button
-                  className="ghost-button"
-                  style={{
-                    fontSize: 12,
-                    padding: "0 4px",
-                    color: "var(--red)",
-                    borderColor: "var(--red)",
-                  }}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Clear all demo data and start fresh? This cannot be undone — export a backup first if you need it.",
-                      )
-                    ) {
-                      setState((s) => ({
-                        ...s,
-                        clients: [],
-                        selectedClientId: null,
-                      }));
-                    }
-                  }}
-                >
-                  clear &amp; start fresh
+            {canCreateDeleteClients ? (
+              <form className="client-form" onSubmit={handleAddClient}>
+                <input
+                  value={newClientName}
+                  placeholder="New client"
+                  onChange={(event) => setNewClientName(event.target.value)}
+                />
+                <button>
+                  <Plus size={16} />
                 </button>
-              </div>
-            )}
+              </form>
+            ) : null}
+            <div className="sidebar-search-group">
+              <button
+                className="global-search-trigger"
+                onClick={() => {
+                  setGlobalSearchOpen(true);
+                  setGlobalSearchQuery("");
+                }}
+                title={
+                  isManagerSession
+                    ? "Search all clients (⌘K)"
+                    : "Search your clients (⌘K)"
+                }
+              >
+                <Search size={14} />
+                <span>
+                  {isManagerSession ? "Search all..." : "Search clients..."}
+                </span>
+                <kbd>⌘K</kbd>
+              </button>
+              <input
+                className="client-search"
+                value={clientSearch}
+                placeholder="Filter sidebar..."
+                onChange={(e) => setClientSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setClientSearch("");
+                  } else if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    const list = e.currentTarget
+                      .closest("aside")
+                      ?.querySelectorAll(".client-link");
+                    if (list?.length) list[0].focus();
+                  }
+                }}
+              />
+            </div>
             <nav className="client-list">
               {(() => {
                 const today = todayIsoDate();
@@ -10572,6 +11789,18 @@ export default function App() {
                             onClick={(e) => {
                               e.stopPropagation();
                               setState((s) => togglePinClient(s, client.id));
+                              updateSupabaseClient(client.id, { pinned: !client.pinned }).then(() => {
+                                auditSilently({
+                                  entityType: "client",
+                                  entityId: client.id,
+                                  action: client.pinned ? "client.unpin" : "client.pin",
+                                  beforeData: { pinned: Boolean(client.pinned) },
+                                  afterData: { clientId: client.id, clientName: client.name, pinned: !client.pinned },
+                                });
+                              }).catch((error) => {
+                                console.error("[CRM] Failed to pin client:", error);
+                                window.alert(`Could not update pin for "${client.name}" in Supabase: ${error.message}`);
+                              });
                             }}
                           >
                             ★
@@ -10598,24 +11827,12 @@ export default function App() {
             </main>
           ) : showOverview ? (
             <>
-              {state.teamAnnouncement && (
-                <div
-                  className="team-announcement-banner cam-announcement"
-                  style={{ margin: "12px 20px 0" }}
-                >
-                  <span>📢</span>
-                  <span style={{ flex: 1 }}>
-                    <strong>Manager:</strong> {state.teamAnnouncement}
-                  </span>
-                </div>
-              )}
               <CamOverview
                 clients={currentCamClients}
                 camProfiles={state.camProfiles || []}
                 allClients={accessibleClients}
                 strategySetRecords={strategySetIndex.records}
                 strategySetIndexStatus={strategySetIndex.status}
-                camName={currentCamProfile?.name || ""}
                 onSelectClient={(clientId) => {
                   setState((current) => selectClient(current, clientId));
                   setShowOverview(false);
@@ -10639,28 +11856,35 @@ export default function App() {
                   });
                 }}
                 monthlyGoal={currentCamProfile?.monthlyGoal || 0}
-                onSetMonthlyGoal={(goal) =>
-                  setState((s) =>
-                    updateCamProfile(s, currentCamProfile?.id, {
-                      monthlyGoal: goal,
-                    }),
-                  )
-                }
+                onSetMonthlyGoal={(goal) => {
+                  if (!currentCamProfile?.id) return;
+                  setState((s) => ({
+                    ...s,
+                    camProfiles: (s.camProfiles || []).map((profile) =>
+                      profile.id === currentCamProfile.id
+                        ? { ...profile, monthlyGoal: goal }
+                        : profile,
+                    ),
+                  }));
+                  updateSupabaseCamProfile(currentCamProfile.id, { monthlyGoal: goal })
+                    .then(() => {
+                      auditSilently({
+                        entityType: "cam_profile",
+                        entityId: currentCamProfile.id,
+                        action: "cam_profile.update_monthly_goal",
+                        beforeData: { monthlyGoal: currentCamProfile.monthlyGoal || 0 },
+                        afterData: { camProfileId: currentCamProfile.id, name: currentCamProfile.name, monthlyGoal: goal },
+                      });
+                    })
+                    .catch((error) => {
+                      console.error("[CRM] Failed to update CAM monthly goal:", error);
+                      window.alert(`Could not save monthly goal to Supabase: ${error.message}`);
+                    });
+                }}
               />
             </>
           ) : (
             <main className="content">
-              {state.teamAnnouncement && (
-                <div
-                  className="team-announcement-banner"
-                  style={{ margin: "12px 20px 0" }}
-                >
-                  <span>📢</span>
-                  <span style={{ flex: 1 }}>
-                    <strong>Manager:</strong> {state.teamAnnouncement}
-                  </span>
-                </div>
-              )}
               {!selectedClient ? (
                 <div className="onboarding-empty">
                   <div className="onboarding-hero">
@@ -11101,6 +12325,7 @@ export default function App() {
                       client={selectedClient}
                       onUpdateClient={handleUpdateClient}
                       onDeleteClient={handleDeleteClient}
+                      canDeleteClient={canCreateDeleteClients}
                     />
                   ) : null}
                   {effectiveActiveTab === "Price Checks" ? (
@@ -11173,7 +12398,19 @@ export default function App() {
                                 selectedClient.id,
                                 accountName.trim(),
                                 meta,
-                              ).catch((error) => {
+                              ).then((savedAccount) => {
+                                auditSilently({
+                                  entityType: "trading_account",
+                                  entityId: savedAccount?.id || accountName.trim(),
+                                  action: "account.create",
+                                  afterData: {
+                                    clientId: selectedClient.id,
+                                    clientName: selectedClient.name,
+                                    accountName: accountName.trim(),
+                                    meta,
+                                  },
+                                });
+                              }).catch((error) => {
                                 console.error(
                                   "[CRM] Failed to add trading account:",
                                   error,
@@ -11201,7 +12438,18 @@ export default function App() {
                               deleteSupabaseTradingAccount(
                                 selectedClient.id,
                                 accountName,
-                              ).catch((error) => {
+                              ).then(() => {
+                                auditSilently({
+                                  entityType: "trading_account",
+                                  entityId: accountName,
+                                  action: "account.delete",
+                                  afterData: {
+                                    clientId: selectedClient.id,
+                                    clientName: selectedClient.name,
+                                    accountName,
+                                  },
+                                });
+                              }).catch((error) => {
                                 console.error(
                                   "[CRM] Failed to remove trading account:",
                                   error,
@@ -11389,7 +12637,7 @@ export default function App() {
               >
                 <div className="global-search-modal">
                   <div className="global-search-bar">
-                    <span className="global-search-icon">⌕</span>
+                    <Search className="global-search-icon" size={16} />
                     <input
                       autoFocus
                       value={globalSearchQuery}
@@ -11426,13 +12674,8 @@ export default function App() {
                                 (p.clientIds || []).includes(r.client.id),
                               )
                             : currentCamProfile;
-                          setState((s) => {
-                            const withCam = ownerCam
-                              ? selectCam(s, ownerCam.id)
-                              : s;
-                            return selectClient(withCam, r.client.id);
-                          });
-                          setPlatformView("cam");
+                          if (ownerCam) openCamWorkspace(ownerCam.id, r.client.id);
+                          else setState((s) => selectClient(s, r.client.id));
                           setShowOverview(false);
                           setShowSOP(false);
                           setActiveTab(r.tab);
@@ -11470,13 +12713,8 @@ export default function App() {
                                 (p.clientIds || []).includes(r.client.id),
                               )
                             : currentCamProfile;
-                          setState((s) => {
-                            const withCam = ownerCam
-                              ? selectCam(s, ownerCam.id)
-                              : s;
-                            return selectClient(withCam, r.client.id);
-                          });
-                          setPlatformView("cam");
+                          if (ownerCam) openCamWorkspace(ownerCam.id, r.client.id);
+                          else setState((s) => selectClient(s, r.client.id));
                           setShowOverview(false);
                           setShowSOP(false);
                           setActiveTab(r.tab);

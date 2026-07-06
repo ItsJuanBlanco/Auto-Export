@@ -1,4 +1,4 @@
-import { getLatestClientImport } from './demoStore';
+import { getLatestClientImport } from './crmStateStore';
 import { matchStrategySet } from './xmlMatch';
 
 function average(values) {

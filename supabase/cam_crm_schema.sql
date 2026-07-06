@@ -11,6 +11,7 @@ create table if not exists public.cam_profiles (
   status text default 'Active',
   monthly_goal numeric default 0,
   live boolean default true,
+  can_manage_clients boolean not null default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -42,6 +43,12 @@ create table if not exists public.clients (
   email text,
   phone text,
   timezone text,
+  country text,
+  start_date date,
+  preferred_channel text,
+  language text,
+  product_key text,
+  additional_emails jsonb default '[]'::jsonb,
   prop_firm text,
   messenger text,
   created_at timestamptz default now(),
@@ -225,9 +232,22 @@ create table if not exists public.client_credentials (
   username text,
   password_encrypted text,
   nt_login text,
+  nt_password_encrypted text,
   firm_login text,
   firm_password_encrypted text,
   notes text,
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.client_prop_firms (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references public.clients(id) on delete cascade,
+  firm_name text,
+  connection text not null default 'Tradovate' check (connection in ('Tradovate', 'Rithmic')),
+  login text,
+  password_encrypted text,
+  sort_order integer default 0,
+  created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
@@ -290,4 +310,3 @@ create index if not exists idx_executions_import_order_id on public.executions(d
 create index if not exists idx_flags_client_status on public.operational_flags(client_id, status);
 create index if not exists idx_tasks_client_done on public.tasks(client_id, done);
 create index if not exists idx_activity_client_created on public.activity_logs(client_id, created_at desc);
-

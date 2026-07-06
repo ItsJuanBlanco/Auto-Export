@@ -1,19 +1,22 @@
 # CAM CRM Supabase Database Tracker
 
-Last updated: 2026-07-01
+Last updated: 2026-07-05
 
 ## Connection Status
 
 - Supabase project URL: `https://rmokyixyhgdwcjbqilsd.supabase.co`
 - Local database check page: `http://127.0.0.1:5173/database`
+- App runtime for admin API: use `vercel dev` / `npm run dev:vercel` so `/api/admin/users` is available.
+- Intake route hook: `/api/admin/intake-sheet`, backed by optional `GOOGLE_SHEET_CSV_URL`.
 - Frontend env keys expected:
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_PUBLISHABLE_KEY`
-- App integration status: connected at startup through `src/lib/supabaseClient.js`
-- Data adapter status: `src/domain/supabaseStore.js` maps Supabase rows back into the existing local app state shape.
-- RLS status for current migration phase: disabled / not enforced yet.
+- Server-only env key expected for user management:
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- App integration status: Supabase is required for authentication and operational data.
+- RLS status: not production-hardened yet. Manager/CAM restrictions exist in app flow and server API checks, but final hard enforcement should be completed with Supabase RLS policies before production use.
 
-Do not store these in frontend env:
+Do not expose these in frontend env:
 
 - `DATABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -21,86 +24,63 @@ Do not store these in frontend env:
 
 ## SQL Files
 
-Run order:
+Recommended run order for a fresh database:
 
 1. `supabase/cam_crm_schema.sql`
-2. `supabase/cam_crm_seed_demo.sql`
-3. `supabase/cam_crm_verification_queries.sql`
+2. `supabase/step_1_auth_setup.sql`
+3. `supabase/step_6_daily_sop.sql`
+4. `supabase/step_7_user_management.sql`
+5. `supabase/step_8_client_management.sql`
+6. `supabase/step_11_report_history.sql`
+7. `supabase/step_12_audit_logs.sql`
+8. `supabase/step_14_shared_client_profile_fields.sql`
+9. `supabase/step_15_client_profile_intake_fields.sql`
+10. `supabase/step_16_prop_firms_platform_access.sql`
+11. `supabase/step_17_real_daily_sop.sql`
+12. `supabase/step_20_cam_client_permissions.sql`
+13. `supabase/cam_crm_verification_queries.sql`
 
-Auth migration:
+No SQL required:
 
-4. Create users in Supabase Dashboard -> Authentication -> Users.
-5. Run `supabase/step_1_auth_setup.sql`.
+- `supabase/step_13_data_tools.md` documents Manager Data Tools for DB-safe export/import.
+- `supabase/step_19_intake_import.md` documents Manager intake CSV import from Google Sheet exports.
 
-## Seed Coverage
+Cleanup:
 
-The demo seed represents the current localStorage demo data:
-
-- 5 CAM profiles
-- 6 app users
-- 6 clients
-- 7 client assignments
-- 17 trading accounts
-- 42 daily imports
-- 119 account snapshots
-- 98 strategy snapshots
-- current-day executions
-- 10 operational flags
-- activity logs
-- tasks
-- payout events
-- empty client credentials rows
+- `supabase/step_10_remove_starter_data.sql` removes the old starter rows from public tables. Run it only after confirming those legacy keys are not being used for real clients.
+- Supabase Auth users are separate from public tables. Remove or disable old starter Auth users in Supabase Dashboard -> Authentication -> Users if they should no longer exist.
 
 ## Tables
 
-| Table | Purpose | Seeded Data |
+| Table | Purpose | App Status |
 | --- | --- | --- |
-| `cam_profiles` | CAM workspace/person profile | Pedro, Amanda, Juan Pablo, Ed, Sarah |
-| `app_users` | App-level user profile linked later to Supabase Auth | Manager plus 5 CAM users |
-| `clients` | Client master records | Rome, Todd, Amanda Capital, Blanco Family, Ed, Sarah Training Pool |
-| `client_assignments` | Many-to-many CAM/client ownership | Pedro owns Rome/Todd/Blanco; Juan backs up Blanco; others own one client |
-| `trading_accounts` | Persistent account registry | Account type, status, payout state, targets, drawdown limits |
-| `daily_imports` | One close per client per trading date | 7 days per client using `current_date - 6..0` |
-| `account_snapshots` | Frozen daily account metrics | PnL, weekly PnL, balance, drawdown |
-| `strategy_snapshots` | Strategy state per account/day | Strategy family/version, realized PnL, parsed params |
-| `orders` | NinjaTrader orders | Empty in seed; table ready for CSV imports |
-| `executions` | NinjaTrader executions attributed to strategy | Current-day entry/exit demo executions |
-| `operational_flags` | Review queue | Critical/warning flags on latest imports |
-| `tasks` | Client/account tasks | Rome and Todd demo tasks |
-| `activity_logs` | Call/note/alert/message timeline | Rome and Todd demo activity |
-| `client_credentials` | VPS/NT/firm credential fields | Empty placeholder rows per client |
-| `price_checks` | Manual price/algo status checks | Empty in seed; table ready |
-| `payout_events` | Payout history | Rome, Todd, Amanda, Blanco, Sarah payout events |
-| `reports` | Generated report history | Empty; table ready |
-| `audit_logs` | Future change audit trail | Empty; table ready |
-
-## Expected Row Counts
-
-After running the seed, the verification query should report:
-
-| Table | Expected Count |
-| --- | ---: |
-| `cam_profiles` | 5 |
-| `app_users` | 6 |
-| `clients` | 6 |
-| `client_assignments` | 7 |
-| `trading_accounts` | 17 |
-| `daily_imports` | 42 |
-| `account_snapshots` | 119 |
-| `strategy_snapshots` | 98 |
-| `executions` | 26 |
-| `operational_flags` | 10 |
-| `sop_templates` | 1 active default template from `step_6_daily_sop.sql` |
-| `sop_sections` | 5 Daily CAM Checklist sections |
-| `sop_items` | 27 checklist items |
-| `tasks` | 7 |
-| `activity_logs` | 8 |
-| `daily_sop_checklists` | Created in `step_6_daily_sop.sql`; grows as CAMs use Daily SOP |
-| `payout_events` | 11 |
+| `cam_profiles` | CAM workspace/person profile | Read/write |
+| `app_users` | App-level user profile linked to Supabase Auth | Read/write through Manager Users & Access |
+| `clients` | Client master records | Read/write |
+| `client_assignments` | CAM/client ownership and transfer | Read/write |
+| `trading_accounts` | Persistent account registry | Read/write |
+| `daily_imports` | One close/import per client per trading date | Read/write |
+| `account_snapshots` | Frozen daily account metrics | Written by import persistence |
+| `strategy_snapshots` | Strategy state per account/day | Written by import persistence |
+| `orders` | NinjaTrader orders | Table ready; imported when order CSV is provided |
+| `executions` | NinjaTrader executions | Written by import persistence |
+| `operational_flags` | Auto-generated review queue | Read/write from recalculate/resolve |
+| `tasks` | Client/account tasks | Read/write |
+| `activity_logs` | Call/note/alert/message timeline | Read/write |
+| `client_credentials` | VPS/NT/firm credential fields | Read/write; server-side encryption still pending |
+| `client_prop_firms` | Multiple client prop firm logins/connections | Read/write; server-side encryption still pending |
+| `price_checks` | Manual price/algo status checks | Read/write |
+| `payout_events` | Payout history | Read/write |
+| `reports` | Generated report history | Read/write from Build Daily Report |
+| `audit_logs` | Change audit trail | Read/write; Manager Audit Logs panel shows recent entries |
+| `sop_templates` | Daily SOP template master | Read/write through Manager SOP Builder |
+| `sop_sections` | Daily SOP sections | Read/write through Manager SOP Builder |
+| `sop_items` | Daily SOP checklist items | Read/write through Manager SOP Builder |
+| `daily_sop_checklists` | Per-CAM daily checklist progress, including per-item checked state JSON | Read/write |
 
 ## Frontend Read Model
 
-`src/domain/supabaseStore.js` reconstructs this shape for the existing React app:
+`src/domain/supabaseStore.js` reconstructs this shape for the React app:
 
 ```text
 state
@@ -123,46 +103,46 @@ state
     priceChecks[]
 ```
 
-## Current Integration Notes
-
-- The first integration phase is read-only for Supabase data.
-- Existing UI actions still update React/local state only unless later wired to Supabase write APIs.
-- Dummy login still uses the existing local demo users.
-- Supabase Auth is not yet required for this phase.
-- `orders` is intentionally empty in seed because demo executions already include `strategy_name`; real CSV import should populate `orders` and use `order.id -> execution.orderId`.
-
-## Next Migration Checklist
+## Integration Checklist
 
 - [x] Create Supabase schema.
-- [x] Seed demo database.
 - [x] Add verification queries.
 - [x] Install `@supabase/supabase-js`.
 - [x] Add Supabase client.
-- [x] Add read adapter from Supabase tables to current app state.
-- [x] Load Supabase data on app startup.
 - [x] Add `/database` connection check page.
-- [x] Create Supabase Auth users.
-- [x] Run `step_1_auth_setup.sql`.
-- [x] Replace dummy login with Supabase Auth login.
+- [x] Replace local login with Supabase Auth login.
 - [x] Scope CAM sidebar/search/analytics to assigned clients.
 - [x] Wire account registry updates to Supabase.
 - [x] Wire tasks/activity updates to Supabase.
 - [x] Wire flags and close-day updates to Supabase.
-- [x] Add Daily SOP template and checklist persistence to Supabase (`step_6_daily_sop.sql`).
-- [x] Add manager SOP Builder CRUD for sections/items.
+- [x] Add Daily SOP template and checklist persistence to Supabase.
+- [x] Add Manager SOP Builder CRUD for sections/items.
 - [x] Wire Manager Users & Access to Supabase Auth + `app_users` via server API.
-- [ ] Move CSV import/reconcile writes to Supabase.
-- [ ] Add RLS policies.
+- [x] Add Manager Client Management for create/delete/transfer assignment.
+- [x] Move CSV import/reconcile writes to Supabase.
+- [x] Remove old starter data and browser business persistence.
+- [x] Persist generated report history into `reports`.
+- [ ] Add production RLS policies.
 - [ ] Move credential encryption/decryption to server-side code.
+- [x] Add basic audit logging into `audit_logs`.
+- [x] Add DB-safe Manager Data Tools export/import.
+- [x] Ensure existing client profile fields are shared between CAM and Manager views.
+- [x] Add client profile intake fields for product key and additional emails.
+- [x] Add multiple prop firm records and NinjaTrader password field.
+- [x] Replace Daily SOP content with the real CAM checklist.
+- [x] Add Manager intake CSV import path for unassigned onboarding clients.
+- [x] Add per-CAM create/delete client permission flag.
+- [x] Add name/email duplicate protection and preview for client intake imports.
+- [x] Add Google Sheet intake fetch/import audit logging.
+- [ ] Expand audit coverage to every low-level data mutation.
 
 ## Permission Direction
 
 - `Manager`: intended full operational permissions for users, clients, CAM assignments, SOP templates, account data, flags, tasks, reports, and imports.
 - `CAM`: intended scoped access to assigned clients and own Daily SOP progress.
-- Current hard database enforcement is still pending RLS. Until RLS is enabled, manager/CAM restrictions are primarily enforced by app flow and server API checks.
+- `CAM can_manage_clients`: optional Manager-controlled permission that allows a CAM to create and deactivate clients from the CAM workspace.
+- Final hard database enforcement is still pending RLS. Until RLS is enabled, restrictions are primarily enforced by app flow and server API checks.
 
 ## Verification Queries
 
 Use `supabase/cam_crm_verification_queries.sql`.
-
-The final smoke assertion query should return zero rows. If it returns rows, the seed counts do not match expectations.

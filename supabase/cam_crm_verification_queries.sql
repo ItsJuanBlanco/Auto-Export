@@ -1,15 +1,7 @@
 -- CAM CRM verification and starter queries
--- Run after cam_crm_schema.sql and cam_crm_seed_demo.sql.
+-- Run after the schema and any migration step files that apply to your environment.
 
--- 1) Smoke counts. Expected after seed:
--- cam_profiles: 5
--- app_users: 6
--- clients: 6
--- trading_accounts: 17
--- daily_imports: 42
--- account_snapshots: 119
--- strategy_snapshots: 98
--- operational_flags: 10
+-- 1) Smoke counts. These should reflect your current production/staging data.
 select 'cam_profiles' as table_name, count(*) from public.cam_profiles
 union all select 'app_users', count(*) from public.app_users
 union all select 'clients', count(*) from public.clients
@@ -22,7 +14,15 @@ union all select 'executions', count(*) from public.executions
 union all select 'operational_flags', count(*) from public.operational_flags
 union all select 'tasks', count(*) from public.tasks
 union all select 'activity_logs', count(*) from public.activity_logs
+union all select 'client_credentials', count(*) from public.client_credentials
+union all select 'client_prop_firms', count(*) from public.client_prop_firms
 union all select 'payout_events', count(*) from public.payout_events
+union all select 'reports', count(*) from public.reports
+union all select 'audit_logs', count(*) from public.audit_logs
+union all select 'sop_templates', count(*) from public.sop_templates
+union all select 'sop_sections', count(*) from public.sop_sections
+union all select 'sop_items', count(*) from public.sop_items
+union all select 'daily_sop_checklists', count(*) from public.daily_sop_checklists
 order by table_name;
 
 -- 2) Clients assigned to one CAM.
@@ -175,17 +175,12 @@ where ta.payout_state <> 'Not requested'
 group by c.name, ta.alias, ta.account_name, ta.payout_state, ta.payout_count, ta.date_last_payout
 order by c.name, ta.alias;
 
--- 10) Hard smoke assertions. This returns rows only if something is wrong.
-with expected(table_name, expected_count) as (
+-- 10) Structural smoke assertion. This returns rows only if a required table is empty.
+with required(table_name) as (
   values
-    ('cam_profiles', 5),
-    ('app_users', 6),
-    ('clients', 6),
-    ('trading_accounts', 17),
-    ('daily_imports', 42),
-    ('account_snapshots', 119),
-    ('strategy_snapshots', 98),
-    ('operational_flags', 10)
+    ('cam_profiles'),
+    ('app_users'),
+    ('clients')
 ),
 actual(table_name, actual_count) as (
   select 'cam_profiles', count(*) from public.cam_profiles
@@ -198,10 +193,72 @@ actual(table_name, actual_count) as (
   union all select 'operational_flags', count(*) from public.operational_flags
 )
 select
-  e.table_name,
-  e.expected_count,
+  r.table_name,
   a.actual_count
-from expected e
+from required r
 join actual a using (table_name)
-where e.expected_count <> a.actual_count;
+where a.actual_count = 0;
 
+-- 11) Active Daily SOP template content.
+select
+  st.name as template_name,
+  ss.display_order as section_order,
+  ss.title as section_title,
+  ss.time_label,
+  si.display_order as item_order,
+  si.item_key,
+  si.text as item_text
+from public.sop_templates st
+join public.sop_sections ss on ss.template_id = st.id and ss.is_active = true
+join public.sop_items si on si.section_id = ss.id and si.is_active = true
+where st.legacy_key = 'cam-daily-v1'
+order by ss.display_order, si.display_order;
+
+-- 12) Daily SOP progress by CAM/date.
+select
+  cp.name as cam_name,
+  st.name as template_name,
+  dsc.checklist_date,
+  dsc.checked_items,
+  dsc.streak_count,
+  dsc.completed_at,
+  dsc.updated_at
+from public.daily_sop_checklists dsc
+join public.cam_profiles cp on cp.id = dsc.cam_profile_id
+left join public.sop_templates st on st.id = dsc.template_id
+order by dsc.updated_at desc
+limit 20;
+
+-- 13) Intake/unassigned onboarding clients.
+select
+  c.name,
+  c.stage,
+  c.email,
+  c.messenger,
+  c.timezone,
+  c.notes,
+  ca.id as assignment_id
+from public.clients c
+left join public.client_assignments ca on ca.client_id = c.id
+where c.stage = 'Onboarding'
+order by c.created_at desc;
+
+-- 14) CAM create/delete client permissions.
+select
+  legacy_key,
+  name,
+  role_title,
+  status,
+  can_manage_clients
+from public.cam_profiles
+order by name;
+
+-- 15) Google Sheet intake audit events.
+select
+  action,
+  after_data,
+  created_at
+from public.audit_logs
+where action in ('data_import.google_sheet.fetch', 'data_import.google_sheet.import')
+order by created_at desc
+limit 20;

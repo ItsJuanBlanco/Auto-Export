@@ -54,7 +54,7 @@ function clients() {
   };
 }
 
-async function requireManager(req, admin, authClient) {
+async function getAuthUserFromRequest(req, authClient) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!token) throw Object.assign(new Error('Missing bearer token.'), { status: 401 });
@@ -63,17 +63,71 @@ async function requireManager(req, admin, authClient) {
   if (userError || !userData?.user?.id) {
     throw Object.assign(new Error('Invalid session token.'), { status: 401 });
   }
+  return userData.user;
+}
+
+function authUserDisplayName(authUser) {
+  return authUser.user_metadata?.display_name
+    || authUser.user_metadata?.full_name
+    || authUser.email?.split('@')?.[0]
+    || 'Manager';
+}
+
+function authUserUsername(authUser) {
+  return normalizeUsername(
+    authUser.user_metadata?.username
+    || authUser.email?.split('@')?.[0]
+    || 'manager',
+  );
+}
+
+async function bootstrapFirstManager(admin, authUser) {
+  const { count, error: countError } = await admin
+    .from('app_users')
+    .select('id', { count: 'exact', head: true });
+  if (countError) throw countError;
+  if (count !== 0) return null;
+
+  const username = authUserUsername(authUser);
+  const displayName = authUserDisplayName(authUser);
+  const email = normalizeEmail(authUser.email);
+
+  const { data, error } = await admin
+    .from('app_users')
+    .insert({
+      legacy_key: legacyUserKey(username),
+      auth_user_id: authUser.id,
+      username,
+      display_name: displayName,
+      email,
+      role: 'Manager',
+      status: 'Active',
+      updated_at: new Date().toISOString(),
+    })
+    .select('id, role, status')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function requireManager(req, admin, authClient) {
+  const authUser = await getAuthUserFromRequest(req, authClient);
 
   const { data: appUser, error: appUserError } = await admin
     .from('app_users')
     .select('id, role, status')
-    .eq('auth_user_id', userData.user.id)
+    .eq('auth_user_id', authUser.id)
     .maybeSingle();
   if (appUserError) throw appUserError;
-  if (appUser?.role !== 'Manager' || appUser.status === 'Inactive') {
+
+  const managerUser = appUser || await bootstrapFirstManager(admin, authUser);
+  if (!managerUser) {
     throw Object.assign(new Error('Manager permission required.'), { status: 403 });
   }
-  return appUser;
+  if (managerUser.role !== 'Manager' || managerUser.status === 'Inactive') {
+    throw Object.assign(new Error('Manager permission required.'), { status: 403 });
+  }
+  return managerUser;
 }
 
 async function getCamProfileId(admin, camProfileId) {

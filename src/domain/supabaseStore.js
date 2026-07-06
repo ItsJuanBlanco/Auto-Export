@@ -96,6 +96,27 @@ function executionFromRow(row, accountById) {
   };
 }
 
+function orderFromRow(row, accountById) {
+  const account = accountById[row.trading_account_id] || null;
+  return {
+    id: row.external_order_id || row.id,
+    accountName: account?.account_name || '',
+    strategyName: row.strategy_name || '',
+    instrument: row.instrument || '',
+    action: row.action || '',
+    orderType: row.order_type || '',
+    quantity: Number(row.quantity || 0),
+    limit: Number(row.limit_price || 0),
+    stop: Number(row.stop_price || 0),
+    state: row.state || '',
+    filled: Number(row.filled || 0),
+    avgPrice: Number(row.avg_price || 0),
+    remaining: Number(row.remaining || 0),
+    name: row.name || '',
+    time: row.time_text || '',
+  };
+}
+
 function flagFromRow(row, accountById) {
   const account = accountById[row.trading_account_id] || null;
   return {
@@ -139,10 +160,25 @@ function priceCheckFromRow(row) {
     date: row.check_date || '',
     instrument: row.instrument || '',
     time: row.time_label || '',
+    checkTime: row.time_label || '',
     price: row.price ?? '',
+    connection: row.connection_status || '',
     connectionStatus: row.connection_status || '',
+    algos: row.algo_status || '',
     algoStatus: row.algo_status || '',
     notes: row.notes || '',
+    checked: Boolean(row.checked),
+  };
+}
+
+function propFirmFromRow(row) {
+  return {
+    id: row.id,
+    firmName: row.firm_name || '',
+    connection: row.connection || 'Tradovate',
+    login: row.login || '',
+    password: row.password_encrypted || '',
+    sortOrder: row.sort_order ?? 0,
   };
 }
 
@@ -168,9 +204,11 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
     accountRows,
     payoutRows,
     credentialRows,
+    propFirmRows,
     importRows,
     snapshotRows,
     strategyRows,
+    orderRows,
     executionRows,
     flagRows,
     taskRows,
@@ -183,9 +221,11 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
     loadTable('trading_accounts'),
     loadTable('payout_events'),
     loadTable('client_credentials'),
+    loadTable('client_prop_firms'),
     loadTable('daily_imports'),
     loadTable('account_snapshots'),
     loadTable('strategy_snapshots'),
+    loadTable('orders'),
     loadTable('executions'),
     loadTable('operational_flags'),
     loadTable('tasks'),
@@ -193,15 +233,20 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
     loadTable('price_checks'),
   ]);
 
-  const clientByUuid = byId(clientRows);
+  const visibleClientRows = (clientRows || []).filter((client) => (
+    !client.deleted_at && client.status !== 'Inactive'
+  ));
+  const clientByUuid = byId(visibleClientRows);
   const accountByUuid = byId(accountRows);
   const accountByClient = {};
   const payoutsByAccount = {};
   const credentialsByClient = {};
+  const propFirmsByClient = {};
   const importsByClient = {};
   const snapshotsByImport = {};
   const strategiesBySnapshot = {};
   const strategiesByImport = {};
+  const ordersByImport = {};
   const executionsByImport = {};
   const flagsByImport = {};
   const tasksByClient = {};
@@ -227,6 +272,11 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
     credentialsByClient[credential.client_id] = credential;
   }
 
+  for (const propFirm of propFirmRows) {
+    if (!propFirmsByClient[propFirm.client_id]) propFirmsByClient[propFirm.client_id] = [];
+    propFirmsByClient[propFirm.client_id].push(propFirmFromRow(propFirm));
+  }
+
   for (const strategy of strategyRows) {
     const mapped = strategyFromRow(strategy);
     if (strategy.account_snapshot_id) {
@@ -245,6 +295,11 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
   for (const execution of executionRows) {
     if (!executionsByImport[execution.daily_import_id]) executionsByImport[execution.daily_import_id] = [];
     executionsByImport[execution.daily_import_id].push(executionFromRow(execution, accountByUuid));
+  }
+
+  for (const order of orderRows) {
+    if (!ordersByImport[order.daily_import_id]) ordersByImport[order.daily_import_id] = [];
+    ordersByImport[order.daily_import_id].push(orderFromRow(order, accountByUuid));
   }
 
   for (const flag of flagRows) {
@@ -279,15 +334,16 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
     status: cam.status || 'Active',
     live: Boolean(cam.live),
     monthlyGoal: Number(cam.monthly_goal || 0),
+    canManageClients: Boolean(cam.can_manage_clients),
     clientIds: assignmentRows
-      .filter((assignment) => assignment.cam_profile_id === cam.id)
-      .map((assignment) => pickId(clientByUuid[assignment.client_id] || { id: assignment.client_id })),
+      .filter((assignment) => assignment.cam_profile_id === cam.id && clientByUuid[assignment.client_id])
+      .map((assignment) => pickId(clientByUuid[assignment.client_id])),
   }));
 
   const camByPublicId = byLegacy(camProfiles);
   const preferredCam = camByPublicId[preferredCamProfileId] || camProfiles[0] || null;
 
-  const clients = clientRows.map((client) => {
+  const clients = visibleClientRows.map((client) => {
     const accounts = accountByClient[client.id] || [];
     const accountRegistry = {};
     for (const account of accounts) {
@@ -308,7 +364,7 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
         accounts: accountRegistry,
         snapshots: snapshotsByImport[dailyImport.id] || [],
         strategies: strategiesByImport[dailyImport.id] || [],
-        orders: [],
+        orders: ordersByImport[dailyImport.id] || [],
         executions: executionsByImport[dailyImport.id] || [],
         flags: flagsByImport[dailyImport.id] || [],
       }))
@@ -327,6 +383,12 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
         email: client.email || '',
         phone: client.phone || '',
         timezone: client.timezone || '',
+        country: client.country || '',
+        startDate: client.start_date || '',
+        preferredChannel: client.preferred_channel || '',
+        language: client.language || '',
+        productKey: client.product_key || '',
+        additionalEmails: jsonArray(client.additional_emails),
         propFirm: client.prop_firm || '',
         messenger: client.messenger || '',
       },
@@ -335,10 +397,14 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
         username: credential.username || '',
         password: credential.password_encrypted || '',
         ntLogin: credential.nt_login || '',
+        ntPassword: credential.nt_password_encrypted || '',
         firmLogin: credential.firm_login || '',
         firmPassword: credential.firm_password_encrypted || '',
         notes: credential.notes || '',
       },
+      propFirms: (propFirmsByClient[client.id] || []).sort((a, b) => (
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+      )),
       accountRegistry,
       dailyImports,
       activityLog: (activityByClient[client.id] || []).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
@@ -351,7 +417,6 @@ export async function loadSupabaseCrmState({ preferredCamProfileId = 'am-pedro' 
   const selectedClientId = preferredCam?.clientIds?.[0] || clients[0]?.id || null;
 
   return {
-    demoVersion: 0,
     dataSource: 'supabase',
     accountManager: {
       id: preferredCam?.id || 'am-pedro',
@@ -374,6 +439,7 @@ export async function loadSupabaseDiagnostics() {
     'daily_imports',
     'account_snapshots',
     'strategy_snapshots',
+    'orders',
     'executions',
     'operational_flags',
     'sop_templates',
@@ -381,6 +447,8 @@ export async function loadSupabaseDiagnostics() {
     'sop_items',
     'tasks',
     'activity_logs',
+    'client_credentials',
+    'client_prop_firms',
     'daily_sop_checklists',
     'payout_events',
   ];
@@ -412,6 +480,15 @@ function numberOrNull(value) {
 
 function emptyToNull(value) {
   return value === '' || value == null ? null : value;
+}
+
+function jsonArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function cleanStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))];
 }
 
 function accountPatchToDb(patch = {}) {
@@ -469,6 +546,93 @@ async function getCamProfileUuid(camProfileId) {
   return data.id;
 }
 
+function makeLegacyKey(prefix, value) {
+  const slug = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return `${prefix}-${slug || Date.now()}`;
+}
+
+function clientPatchToDb(patch = {}) {
+  const mapped = {};
+  if ('name' in patch) mapped.name = patch.name || '';
+  if ('status' in patch) mapped.status = patch.status || 'Active';
+  if ('pinned' in patch) mapped.pinned = Boolean(patch.pinned);
+  if ('pinnedNote' in patch) mapped.pinned_note = patch.pinnedNote || '';
+  if ('notes' in patch) mapped.notes = patch.notes || '';
+  if ('profile' in patch) {
+    const profile = patch.profile || {};
+    if ('stage' in profile) mapped.stage = profile.stage || 'Active';
+    if ('fullName' in profile) mapped.full_name = profile.fullName || '';
+    if ('email' in profile) mapped.email = profile.email || '';
+    if ('phone' in profile) mapped.phone = profile.phone || '';
+    if ('timezone' in profile) mapped.timezone = profile.timezone || '';
+    if ('country' in profile) mapped.country = profile.country || '';
+    if ('startDate' in profile) mapped.start_date = profile.startDate || null;
+    if ('preferredChannel' in profile) mapped.preferred_channel = profile.preferredChannel || '';
+    if ('language' in profile) mapped.language = profile.language || '';
+    if ('productKey' in profile) mapped.product_key = profile.productKey || '';
+    if ('additionalEmails' in profile) mapped.additional_emails = cleanStringArray(profile.additionalEmails);
+    if ('propFirm' in profile) mapped.prop_firm = profile.propFirm || '';
+    if ('messenger' in profile) mapped.messenger = profile.messenger || '';
+  }
+  mapped.updated_at = new Date().toISOString();
+  return mapped;
+}
+
+function credentialsToDb(credentials = {}) {
+  return {
+    ip: credentials.ip || '',
+    username: credentials.username || '',
+    password_encrypted: credentials.password || '',
+    nt_login: credentials.ntLogin || '',
+    nt_password_encrypted: credentials.ntPassword || '',
+    firm_login: credentials.firmLogin || '',
+    firm_password_encrypted: credentials.firmPassword || '',
+    notes: credentials.notes || '',
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function propFirmToDb(propFirm = {}, clientUuid, index = 0) {
+  const connection = propFirm.connection === 'Rithmic' ? 'Rithmic' : 'Tradovate';
+  return {
+    client_id: clientUuid,
+    firm_name: propFirm.firmName || '',
+    connection,
+    login: propFirm.login || '',
+    password_encrypted: propFirm.password || '',
+    sort_order: index,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function hasPropFirmData(propFirm = {}) {
+  return Boolean(
+    String(propFirm.firmName || '').trim() ||
+    String(propFirm.login || '').trim() ||
+    String(propFirm.password || '').trim(),
+  );
+}
+
+function priceCheckToDb(row = {}, clientUuid, fallbackDate) {
+  return {
+    client_id: clientUuid,
+    check_date: row.date || fallbackDate,
+    instrument: row.instrument || '',
+    time_label: row.time || row.checkTime || '',
+    price: numberOrNull(row.price),
+    connection_status: row.connectionStatus || row.connection || '',
+    algo_status: row.algoStatus || row.algos || '',
+    notes: row.notes || '',
+    checked: Boolean(row.checked),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 async function getDailyImportUuid(importId) {
   let query = supabase
     .from('daily_imports')
@@ -478,6 +642,14 @@ async function getDailyImportUuid(importId) {
   if (error) throw new Error(error.message);
   if (!data?.id) throw new Error(`Daily import not found: ${importId}`);
   return data.id;
+}
+
+async function getCurrentAppUserId() {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const { data, error } = await supabase.rpc('current_app_user');
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row?.id || null;
 }
 
 async function getTradingAccount(clientId, accountName) {
@@ -515,6 +687,242 @@ export async function updateSupabaseTradingAccount(clientId, accountName, patch)
     .single();
   if (error) throw new Error(error.message);
   return data;
+}
+
+export async function createSupabaseClient(name, camProfileId = null, stage = 'Active') {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const trimmedName = String(name || '').trim();
+  if (!trimmedName) throw new Error('Client name is required.');
+
+  const { data: client, error } = await supabase
+    .from('clients')
+    .insert({
+      legacy_key: `${makeLegacyKey('client', trimmedName)}-${Date.now().toString(36)}`,
+      name: trimmedName,
+      status: 'Active',
+      stage: stage || 'Active',
+      full_name: trimmedName,
+      notes: '',
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  if (camProfileId) {
+    const camUuid = await getCamProfileUuid(camProfileId);
+    const { error: assignmentError } = await supabase
+      .from('client_assignments')
+      .upsert({
+        client_id: client.id,
+        cam_profile_id: camUuid,
+        assignment_role: 'Owner',
+      }, { onConflict: 'client_id,cam_profile_id' });
+    if (assignmentError) throw new Error(assignmentError.message);
+  }
+
+  return {
+    id: pickId(client),
+    name: client.name,
+    status: client.status || 'Active',
+    pinned: Boolean(client.pinned),
+    pinnedNote: client.pinned_note || '',
+    notes: client.notes || '',
+    profile: {
+      stage: client.stage || 'Active',
+      fullName: client.full_name || client.name,
+      email: client.email || '',
+      phone: client.phone || '',
+      timezone: client.timezone || '',
+      country: client.country || '',
+      startDate: client.start_date || '',
+      preferredChannel: client.preferred_channel || '',
+      language: client.language || '',
+      productKey: client.product_key || '',
+      additionalEmails: jsonArray(client.additional_emails),
+      propFirm: client.prop_firm || '',
+      messenger: client.messenger || '',
+    },
+    credentials: {
+      ip: '',
+      username: '',
+      password: '',
+      ntLogin: '',
+      ntPassword: '',
+      firmLogin: '',
+      firmPassword: '',
+      notes: '',
+    },
+    propFirms: [],
+    accountRegistry: {},
+    dailyImports: [],
+    activityLog: [],
+    tasks: [],
+    priceChecks: [],
+    priceChecksDate: '',
+  };
+}
+
+export async function createSupabaseCamProfile(name, roleTitle = 'CAM') {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const trimmedName = String(name || '').trim();
+  if (!trimmedName) throw new Error('CAM name is required.');
+
+  const { data, error } = await supabase
+    .from('cam_profiles')
+    .insert({
+      legacy_key: `${makeLegacyKey('am', trimmedName)}-${Date.now().toString(36)}`,
+      name: trimmedName,
+      role_title: roleTitle || 'CAM',
+      status: 'Active',
+      live: true,
+      can_manage_clients: false,
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return {
+    id: pickId(data),
+    name: data.name,
+    role: data.role_title || 'CAM',
+    status: data.status || 'Active',
+    live: Boolean(data.live),
+    canManageClients: Boolean(data.can_manage_clients),
+    clientIds: [],
+  };
+}
+
+export async function updateSupabaseCamProfile(camProfileId, patch = {}) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const camUuid = await getCamProfileUuid(camProfileId);
+  const mapped = { updated_at: new Date().toISOString() };
+  if ('monthlyGoal' in patch) mapped.monthly_goal = numberOrNull(patch.monthlyGoal) || 0;
+  if ('name' in patch) mapped.name = patch.name || '';
+  if ('role' in patch) mapped.role_title = patch.role || 'CAM';
+  if ('status' in patch) mapped.status = patch.status || 'Active';
+  if ('live' in patch) mapped.live = Boolean(patch.live);
+  if ('canManageClients' in patch) mapped.can_manage_clients = Boolean(patch.canManageClients);
+
+  const { data, error } = await supabase
+    .from('cam_profiles')
+    .update(mapped)
+    .eq('id', camUuid)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateSupabaseClient(clientId, patch = {}) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const clientUuid = await getClientUuid(clientId);
+  const dbPatch = clientPatchToDb(patch);
+  const credentialPatch = 'credentials' in patch ? credentialsToDb(patch.credentials || {}) : null;
+  const propFirmPatch = 'propFirms' in patch ? (patch.propFirms || []) : null;
+
+  const { data, error } = await supabase
+    .from('clients')
+    .update(dbPatch)
+    .eq('id', clientUuid)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  if (credentialPatch) {
+    const { error: credentialError } = await supabase
+      .from('client_credentials')
+      .upsert({ client_id: clientUuid, ...credentialPatch }, { onConflict: 'client_id' });
+    if (credentialError) throw new Error(credentialError.message);
+  }
+
+  if (propFirmPatch) {
+    const { error: deleteError } = await supabase
+      .from('client_prop_firms')
+      .delete()
+      .eq('client_id', clientUuid);
+    if (deleteError) throw new Error(deleteError.message);
+
+    const rows = propFirmPatch
+      .filter(hasPropFirmData)
+      .map((propFirm, index) => propFirmToDb(propFirm, clientUuid, index));
+    if (rows.length) {
+      const { error: insertError } = await supabase
+        .from('client_prop_firms')
+        .insert(rows);
+      if (insertError) throw new Error(insertError.message);
+    }
+  }
+
+  return data;
+}
+
+export async function softDeleteSupabaseClient(clientId) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const clientUuid = await getClientUuid(clientId);
+  const { data, error } = await supabase
+    .from('clients')
+    .update({
+      status: 'Inactive',
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', clientUuid)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function transferSupabaseClient(clientId, toCamProfileId) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const [clientUuid, camUuid] = await Promise.all([
+    getClientUuid(clientId),
+    getCamProfileUuid(toCamProfileId),
+  ]);
+
+  const { error: deleteError } = await supabase
+    .from('client_assignments')
+    .delete()
+    .eq('client_id', clientUuid)
+    .eq('assignment_role', 'Owner');
+  if (deleteError) throw new Error(deleteError.message);
+
+  const { data, error } = await supabase
+    .from('client_assignments')
+    .upsert({
+      client_id: clientUuid,
+      cam_profile_id: camUuid,
+      assignment_role: 'Owner',
+      assigned_at: new Date().toISOString(),
+    }, { onConflict: 'client_id,cam_profile_id' })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function replaceSupabasePriceChecks(clientId, rows = [], checkDate = null) {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const clientUuid = await getClientUuid(clientId);
+  const targetDate = checkDate || new Date().toISOString().slice(0, 10);
+
+  const { error: deleteError } = await supabase
+    .from('price_checks')
+    .delete()
+    .eq('client_id', clientUuid)
+    .eq('check_date', targetDate);
+  if (deleteError) throw new Error(deleteError.message);
+
+  const dbRows = (rows || []).map((row) => priceCheckToDb(row, clientUuid, targetDate));
+  if (!dbRows.length) return [];
+
+  const { data, error } = await supabase
+    .from('price_checks')
+    .insert(dbRows)
+    .select();
+  if (error) throw new Error(error.message);
+  return (data || []).map(priceCheckFromRow);
 }
 
 export async function upsertSupabaseTradingAccount(clientId, accountName, meta = {}) {
@@ -741,6 +1149,204 @@ export async function replaceSupabaseOperationalFlags(clientId, importId, flags 
   }));
 }
 
+export async function upsertSupabaseDailyImport(clientId, importResult) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  if (!importResult?.date) throw new Error('Import date is required.');
+
+  const clientUuid = await getClientUuid(clientId);
+  const accountRows = Object.values(importResult.accounts || {});
+  if (accountRows.length) {
+    const accountUpserts = accountRows.map((meta) => ({
+      client_id: clientUuid,
+      legacy_key: meta.accountName || meta.alias || `account-${Date.now()}`,
+      account_name: meta.accountName,
+      alias: meta.alias || meta.accountName,
+      connection: meta.connection || '',
+      account_type: meta.accountType || 'Unassigned',
+      status: meta.status || 'Active',
+      payout_state: meta.payoutState || 'Not requested',
+      start_balance: numberOrNull(meta.startBalance),
+      target_profit: numberOrNull(meta.targetProfit),
+      max_drawdown_limit: numberOrNull(meta.maxDrawdownLimit),
+      bullet_bot_pass_type: meta.bulletBotPassType || '',
+      bullet_bot_direction: meta.bulletBotDirection || '',
+      notes: meta.notes || '',
+      date_added: emptyToNull(meta.dateAdded),
+      date_funded: emptyToNull(meta.dateFunded),
+      date_failed: emptyToNull(meta.dateFailed),
+      date_last_payout: emptyToNull(meta.dateLastPayout),
+      payout_count: numberOrNull(meta.payoutCount) || 0,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error: accountError } = await supabase
+      .from('trading_accounts')
+      .upsert(accountUpserts, { onConflict: 'client_id,account_name' });
+    if (accountError) throw new Error(accountError.message);
+  }
+
+  const { data: accounts, error: accountsError } = await supabase
+    .from('trading_accounts')
+    .select('id, account_name')
+    .eq('client_id', clientUuid);
+  if (accountsError) throw new Error(accountsError.message);
+  const accountByName = Object.fromEntries((accounts || []).map((account) => [
+    String(account.account_name || '').toLowerCase(),
+    account,
+  ]));
+
+  const { data: dailyImport, error: importError } = await supabase
+    .from('daily_imports')
+    .upsert({
+      client_id: clientUuid,
+      legacy_key: importResult.id || `${clientId}-${importResult.date}`,
+      trading_date: importResult.date,
+      imported_at: importResult.importedAt || new Date().toISOString(),
+      status: importResult.status || 'Needs review',
+      source_summary: {
+        accounts: (importResult.snapshots || []).length,
+        strategies: (importResult.strategies || []).length,
+        orders: (importResult.orders || []).length,
+        executions: (importResult.executions || []).length,
+        flags: (importResult.flags || []).length,
+      },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'client_id,trading_date' })
+    .select()
+    .single();
+  if (importError) throw new Error(importError.message);
+
+  const childTables = ['strategy_snapshots', 'account_snapshots', 'orders', 'executions', 'operational_flags'];
+  for (const table of childTables) {
+    const { error } = await supabase.from(table).delete().eq('daily_import_id', dailyImport.id);
+    if (error) throw new Error(error.message);
+  }
+
+  const snapshotRows = (importResult.snapshots || []).map((snapshot) => {
+    const account = accountByName[String(snapshot.accountName || '').toLowerCase()];
+    return {
+      daily_import_id: dailyImport.id,
+      trading_account_id: account?.id || null,
+      account_name: snapshot.accountName || '',
+      connection: snapshot.connection || '',
+      gross_realized_pnl: numberOrNull(snapshot.grossRealizedPnl) || 0,
+      trailing_max_drawdown: numberOrNull(snapshot.trailingMaxDrawdown) || 0,
+      account_balance: numberOrNull(snapshot.accountBalance) || 0,
+      weekly_pnl: numberOrNull(snapshot.weeklyPnl) || 0,
+      unrealized_pnl: numberOrNull(snapshot.unrealizedPnl) || 0,
+    };
+  });
+
+  let snapshotByName = {};
+  if (snapshotRows.length) {
+    const { data, error } = await supabase
+      .from('account_snapshots')
+      .insert(snapshotRows)
+      .select();
+    if (error) throw new Error(error.message);
+    snapshotByName = Object.fromEntries((data || []).map((snapshot) => [
+      String(snapshot.account_name || '').toLowerCase(),
+      snapshot,
+    ]));
+  }
+
+  const strategyRows = (importResult.strategies || []).map((strategy) => {
+    const account = accountByName[String(strategy.accountName || '').toLowerCase()];
+    const snapshot = snapshotByName[String(strategy.accountName || '').toLowerCase()];
+    return {
+      daily_import_id: dailyImport.id,
+      trading_account_id: account?.id || null,
+      account_snapshot_id: snapshot?.id || null,
+      strategy_name: strategy.strategyName || '',
+      strategy_family: strategy.strategyFamily || '',
+      strategy_version: strategy.strategyVersion || '',
+      instrument: strategy.instrument || '',
+      data_series: strategy.dataSeries || '',
+      parameters_raw: strategy.parametersRaw || '',
+      params_parsed: strategy.params || {},
+      direction: strategy.direction || '',
+      enabled: Boolean(strategy.enabled),
+      realized: numberOrNull(strategy.realized) || 0,
+      unrealized: numberOrNull(strategy.unrealized) || 0,
+      config_match: strategy.configMatch || {},
+    };
+  });
+  if (strategyRows.length) {
+    const { error } = await supabase.from('strategy_snapshots').insert(strategyRows);
+    if (error) throw new Error(error.message);
+  }
+
+  const orderRows = (importResult.orders || []).map((order) => {
+    const account = accountByName[String(order.accountName || '').toLowerCase()];
+    return {
+      daily_import_id: dailyImport.id,
+      trading_account_id: account?.id || null,
+      external_order_id: order.id || '',
+      strategy_name: order.strategyName || '',
+      instrument: order.instrument || '',
+      action: order.action || '',
+      order_type: order.orderType || '',
+      quantity: numberOrNull(order.quantity),
+      limit_price: numberOrNull(order.limit),
+      stop_price: numberOrNull(order.stop),
+      state: order.state || '',
+      filled: numberOrNull(order.filled),
+      avg_price: numberOrNull(order.avgPrice),
+      remaining: numberOrNull(order.remaining),
+      name: order.name || '',
+      time_text: order.time || '',
+    };
+  });
+  if (orderRows.length) {
+    const { error } = await supabase.from('orders').insert(orderRows);
+    if (error) throw new Error(error.message);
+  }
+
+  const executionRows = (importResult.executions || []).map((execution) => {
+    const account = accountByName[String(execution.accountName || '').toLowerCase()];
+    return {
+      daily_import_id: dailyImport.id,
+      trading_account_id: account?.id || null,
+      external_execution_id: execution.id || '',
+      external_order_id: execution.orderId || '',
+      strategy_name: execution.strategyName || '',
+      instrument: execution.instrument || '',
+      action: execution.action || '',
+      quantity: numberOrNull(execution.quantity),
+      price: numberOrNull(execution.price),
+      time_text: execution.time || '',
+      entry_exit: execution.entryExit || '',
+      position: execution.position || '',
+      name: execution.name || '',
+      commission: numberOrNull(execution.commission),
+      rate: numberOrNull(execution.rate),
+      connection: execution.connection || '',
+    };
+  });
+  if (executionRows.length) {
+    const { error } = await supabase.from('executions').insert(executionRows);
+    if (error) throw new Error(error.message);
+  }
+
+  const flagRows = (importResult.flags || []).map((flag) => {
+    const account = accountByName[String(flag.accountName || '').toLowerCase()];
+    return {
+      daily_import_id: dailyImport.id,
+      client_id: clientUuid,
+      trading_account_id: account?.id || null,
+      type: flag.type,
+      severity: flag.severity || 'Warning',
+      message: flag.message || '',
+      status: flag.status || 'Open',
+    };
+  });
+  if (flagRows.length) {
+    const { error } = await supabase.from('operational_flags').insert(flagRows);
+    if (error) throw new Error(error.message);
+  }
+
+  return dailyImport;
+}
+
 export async function updateSupabaseDailyImportStatus(importId, status) {
   if (!isSupabaseConfigured || !supabase) return null;
   let query = supabase
@@ -750,6 +1356,115 @@ export async function updateSupabaseDailyImportStatus(importId, status) {
   const { data, error } = await query.select().maybeSingle();
   if (error) throw new Error(error.message);
   return data;
+}
+
+export function reportFromRow(row = {}) {
+  const content = row.content && typeof row.content === 'object' ? row.content : {};
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    dailyImportId: row.daily_import_id || '',
+    reportType: row.report_type || '',
+    reportDate: row.report_date || '',
+    content,
+    title: content.title || content.summary?.clientName || row.report_type || 'Report',
+    generatedByUserId: row.generated_by_user_id || '',
+    createdAt: row.created_at || '',
+  };
+}
+
+export async function createSupabaseReport(clientId, dailyImportId, reportType, content = {}) {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const clientUuid = await getClientUuid(clientId);
+  const importUuid = dailyImportId ? await getDailyImportUuid(dailyImportId) : null;
+  const generatedByUserId = await getCurrentAppUserId();
+  const reportDate = content.reportDate || content.summary?.date || null;
+
+  const { data, error } = await supabase
+    .from('reports')
+    .insert({
+      client_id: clientUuid,
+      daily_import_id: importUuid,
+      report_type: reportType || 'daily_close',
+      report_date: reportDate,
+      content,
+      generated_by_user_id: generatedByUserId,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return reportFromRow(data);
+}
+
+export async function loadSupabaseReports(clientId, { limit = 10 } = {}) {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const clientUuid = await getClientUuid(clientId);
+  const { data, error } = await supabase
+    .from('reports')
+    .select('*')
+    .eq('client_id', clientUuid)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data || []).map(reportFromRow);
+}
+
+export function auditLogFromRow(row = {}) {
+  const afterData = row.after_data && typeof row.after_data === 'object' ? row.after_data : {};
+  const beforeData = row.before_data && typeof row.before_data === 'object' ? row.before_data : {};
+  return {
+    id: row.id,
+    userId: row.user_id || '',
+    userDisplayName: row.app_users?.display_name || row.app_users?.username || '',
+    userEmail: row.app_users?.email || '',
+    entityType: row.entity_type || '',
+    entityId: row.entity_id || '',
+    action: row.action || '',
+    beforeData,
+    afterData,
+    createdAt: row.created_at || '',
+  };
+}
+
+export async function createSupabaseAuditLog({
+  entityType,
+  entityId = null,
+  action,
+  beforeData = null,
+  afterData = null,
+} = {}) {
+  if (!isSupabaseConfigured || !supabase || !entityType || !action) return null;
+  const userId = await getCurrentAppUserId();
+  const uuidEntityId = isUuid(entityId) ? entityId : null;
+  const normalizedAfter = {
+    ...(afterData && typeof afterData === 'object' ? afterData : {}),
+    ...(!uuidEntityId && entityId ? { legacyEntityId: entityId } : {}),
+  };
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .insert({
+      user_id: userId,
+      entity_type: entityType,
+      entity_id: uuidEntityId,
+      action,
+      before_data: beforeData,
+      after_data: Object.keys(normalizedAfter).length ? normalizedAfter : afterData,
+    })
+    .select('*, app_users(display_name, username, email)')
+    .single();
+  if (error) throw new Error(error.message);
+  return auditLogFromRow(data);
+}
+
+export async function loadSupabaseAuditLogs({ limit = 50 } = {}) {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*, app_users(display_name, username, email)')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data || []).map(auditLogFromRow);
 }
 
 export async function loadSupabaseDailySop(camProfileId, checklistDate) {

@@ -1,6 +1,6 @@
 # CAM CRM
 
-Local web CRM prototype for managing trading client accounts from NinjaTrader end-of-day exports.
+Web CRM for managing trading client accounts from NinjaTrader end-of-day exports with Supabase-backed persistence.
 
 The goal is to replace a manual Excel workflow with a safer daily close process: upload the client's NinjaTrader CSV files, persist account classifications, review action flags, inspect account/strategy performance, and build a clean daily report.
 
@@ -66,7 +66,7 @@ public/strategy-set-index.json
 
 That generated JSON is also gitignored. The app will use it locally to match strategies by signature and show XML-derived labels such as risk, period, set version, Bullet Bot pass type, direction, size, and target.
 
-## Demo Workflow
+## Daily Workflow
 
 1. Run `npm run dev:open`.
 2. Add a client from the sidebar.
@@ -102,7 +102,7 @@ These are ignored by git and should stay local:
 - NinjaTrader CSV exports
 - NinjaTrader strategy/set XML files
 - Generated `public/strategy-set-index.json`
-- Local CRM backup JSON files
+- Local `.env` / `.env.local` files
 
 ## Scripts
 
@@ -117,4 +117,4 @@ npm run lint       # ESLint check
 
 ## Project Status
 
-This is a local-first prototype intended for internal review and workflow validation. It currently uses browser localStorage for demo persistence and does not require a backend.
+The active application uses Supabase for authentication and operational persistence. Browser storage is limited to non-critical UI/session state; client, CAM, account, import, task, flag, user, and SOP data should be stored in Supabase.

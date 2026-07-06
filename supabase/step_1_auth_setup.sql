@@ -6,13 +6,10 @@
 -- 2) Use the same emails listed in this file.
 -- 3) Then run this SQL in Supabase SQL Editor.
 --
--- Recommended demo Auth users:
--- manager@vinceretrading.com  / demo123456
--- pedro@vinceretrading.com    / pedro123456
--- amanda@vinceretrading.com   / amanda123456
--- juan@vinceretrading.com     / juan123456
--- ed@vinceretrading.com       / ed123456
--- sarah@vinceretrading.com    / sarah123456
+-- Starter Auth users can be created through the Manager -> Users & Access panel
+-- when running with Vercel dev/deployment and SUPABASE_SERVICE_ROLE_KEY.
+-- For a new production workspace, create real users only and assign CAM profiles
+-- from the manager UI.
 
 create extension if not exists "pgcrypto";
 
@@ -161,4 +158,3 @@ select
 from public.app_users
 where auth_user_id is null
 order by username;
-
