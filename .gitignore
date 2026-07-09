@@ -16,6 +16,7 @@ dist-ssr
 
 # Environment files
 .env
+.env.local
 .env.*
 !.env.example
 
@@ -47,3 +48,4 @@ public/strategy-set-index.json
 # Local CRM backups
 cam-backup-*.json
 .vercel
+.env*

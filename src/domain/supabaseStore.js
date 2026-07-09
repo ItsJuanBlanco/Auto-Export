@@ -172,9 +172,11 @@ function priceCheckFromRow(row) {
 }
 
 function propFirmFromRow(row) {
+  const firmName = row.firm_name || '';
   return {
     id: row.id,
-    firmName: row.firm_name || '',
+    name: firmName,
+    firmName,
     connection: row.connection || 'Tradovate',
     login: row.login || '',
     password: row.password_encrypted || '',
@@ -599,9 +601,10 @@ function credentialsToDb(credentials = {}) {
 
 function propFirmToDb(propFirm = {}, clientUuid, index = 0) {
   const connection = propFirm.connection === 'Rithmic' ? 'Rithmic' : 'Tradovate';
+  const firmName = propFirm.name || propFirm.firmName || '';
   return {
     client_id: clientUuid,
-    firm_name: propFirm.firmName || '',
+    firm_name: firmName,
     connection,
     login: propFirm.login || '',
     password_encrypted: propFirm.password || '',
@@ -612,6 +615,7 @@ function propFirmToDb(propFirm = {}, clientUuid, index = 0) {
 
 function hasPropFirmData(propFirm = {}) {
   return Boolean(
+    String(propFirm.name || '').trim() ||
     String(propFirm.firmName || '').trim() ||
     String(propFirm.login || '').trim() ||
     String(propFirm.password || '').trim(),
@@ -876,10 +880,7 @@ export async function softDeleteSupabaseClient(clientId) {
 
 export async function transferSupabaseClient(clientId, toCamProfileId) {
   if (!isSupabaseConfigured || !supabase) return null;
-  const [clientUuid, camUuid] = await Promise.all([
-    getClientUuid(clientId),
-    getCamProfileUuid(toCamProfileId),
-  ]);
+  const clientUuid = await getClientUuid(clientId);
 
   const { error: deleteError } = await supabase
     .from('client_assignments')
@@ -888,6 +889,9 @@ export async function transferSupabaseClient(clientId, toCamProfileId) {
     .eq('assignment_role', 'Owner');
   if (deleteError) throw new Error(deleteError.message);
 
+  if (!toCamProfileId) return null;
+
+  const camUuid = await getCamProfileUuid(toCamProfileId);
   const { data, error } = await supabase
     .from('client_assignments')
     .upsert({

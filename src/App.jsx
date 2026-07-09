@@ -88,6 +88,7 @@ import {
 import {
   createSupabaseManagedUser,
   deactivateSupabaseManagedUser,
+  deleteSupabaseManagedUser,
   loadSupabaseManagedUsers,
   updateSupabaseManagedUser,
 } from "./domain/supabaseUserAdmin";
@@ -1239,6 +1240,21 @@ function clientsForCam(clients = [], camProfile = null) {
   return clients.filter((client) => allowed.has(client.id));
 }
 
+function activeCamProfilesForUsers(camProfiles = [], users = []) {
+  const activeProfiles = (camProfiles || []).filter((profile) => (profile.status || "Active") !== "Inactive");
+  if (!(users || []).length) return activeProfiles;
+  const activeCamIds = new Set(
+    (users || [])
+      .filter((user) => (
+        user.role === USER_ROLES.CAM &&
+        (user.status || "Active") !== "Inactive" &&
+        user.camProfileId
+      ))
+      .map((user) => user.camProfileId),
+  );
+  return activeProfiles.filter((profile) => activeCamIds.has(profile.id));
+}
+
 function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -1635,14 +1651,14 @@ function intakeCsvRowToClient(row = {}) {
   };
 }
 
-function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
+function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [], clients = [], onRefreshState }) {
   const [newUser, setNewUser] = useState({
     username: "",
     password: "",
     displayName: "",
     email: "",
     role: USER_ROLES.CAM,
-    camProfileId: "",
+    hasCamProfile: true,
   });
   const [editUserId, setEditUserId] = useState(null);
   const [editUserPatch, setEditUserPatch] = useState({});
@@ -1677,6 +1693,12 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function assignedClientsForUser(user) {
+    const profile = (camProfiles || []).find((cam) => cam.id === user.camProfileId);
+    const ids = new Set(profile?.clientIds || []);
+    return (clients || []).filter((client) => ids.has(client.id));
+  }
+
   async function submitNewUser(event) {
     event.preventDefault();
     if (!newUser.username || !newUser.password || !newUser.displayName || !newUser.email) return;
@@ -1689,7 +1711,11 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
     }
     try {
       setError("");
-      const remoteUsers = await createSupabaseManagedUser(newUser);
+      const payload = {
+        ...newUser,
+        hasCamProfile: newUser.role === USER_ROLES.CAM && Boolean(newUser.hasCamProfile),
+      };
+      const remoteUsers = await createSupabaseManagedUser(payload);
       onUsersChange(remoteUsers);
       const createdUser = remoteUsers.find((u) => u.username === newUser.username.toLowerCase());
       auditSilently({
@@ -1701,9 +1727,10 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
           displayName: newUser.displayName,
           email: newUser.email,
           role: newUser.role,
-          camProfileId: newUser.camProfileId || null,
+          hasCamProfile: payload.hasCamProfile,
         },
       });
+      await onRefreshState?.();
       setStatus("connected");
       setNewUser({
         username: "",
@@ -1711,7 +1738,7 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
         displayName: "",
         email: "",
         role: USER_ROLES.CAM,
-        camProfileId: "",
+        hasCamProfile: true,
       });
     } catch (err) {
       window.alert(`Could not create user: ${err.message}`);
@@ -1729,11 +1756,19 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
       displayName: patch.displayName ?? user.displayName,
       email: patch.email ?? user.email,
       role: patch.role ?? user.role,
-      camProfileId: patch.camProfileId ?? user.camProfileId ?? "",
+      hasCamProfile: (patch.role ?? user.role) === USER_ROLES.CAM
+        ? (patch.hasCamProfile ?? Boolean(user.camProfileId))
+        : false,
       status: patch.status ?? user.status ?? "Active",
       password: patch.password,
     };
     if (!nextUser.username || !nextUser.displayName || !nextUser.email) return;
+    if (user.camProfileId && !nextUser.hasCamProfile) {
+      const assigned = assignedClientsForUser(user);
+      if (assigned.length && !window.confirm(
+        `Turn off CAM profile for "${user.displayName}"? ${assigned.length} client${assigned.length !== 1 ? "s" : ""} will become Unassigned: ${assigned.map((client) => client.name).join(", ")}`,
+      )) return;
+    }
     try {
       setError("");
       if (!user.appUserId) throw new Error("Supabase app user ID is missing.");
@@ -1748,7 +1783,7 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
           displayName: user.displayName,
           email: user.email,
           role: user.role,
-          camProfileId: user.camProfileId || null,
+          hasCamProfile: Boolean(user.camProfileId),
           status: user.status || "Active",
         },
         afterData: {
@@ -1756,11 +1791,12 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
           displayName: nextUser.displayName,
           email: nextUser.email,
           role: nextUser.role,
-          camProfileId: nextUser.camProfileId || null,
+          hasCamProfile: nextUser.hasCamProfile,
           status: nextUser.status || "Active",
           passwordChanged: Boolean(patch.password),
         },
       });
+      await onRefreshState?.();
       setStatus("connected");
       setEditUserId(null);
       setEditUserPatch({});
@@ -1786,9 +1822,42 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
         beforeData: { username: user.username, status: user.status || "Active" },
         afterData: { username: user.username, status: "Inactive" },
       });
+      await onRefreshState?.();
       setStatus("connected");
     } catch (err) {
       window.alert(`Could not deactivate user: ${err.message}`);
+      setStatus("error");
+      setError(err.message);
+    }
+  }
+
+  async function deleteUser(user) {
+    if (user.role === USER_ROLES.MANAGER) return;
+    const assigned = assignedClientsForUser(user);
+    const assignmentNote = assigned.length
+      ? ` ${assigned.length} client${assigned.length !== 1 ? "s" : ""} will become Unassigned: ${assigned.map((client) => client.name).join(", ")}.`
+      : "";
+    if (!window.confirm(`Delete user "${user.displayName}" everywhere? This removes their login and linked CAM profile.${assignmentNote}`)) return;
+    try {
+      setError("");
+      if (!user.appUserId) throw new Error("Supabase app user ID is missing.");
+      const remoteUsers = await deleteSupabaseManagedUser(user.appUserId);
+      onUsersChange(remoteUsers);
+      auditSilently({
+        entityType: "app_user",
+        entityId: user.appUserId,
+        action: "user.delete",
+        beforeData: {
+          username: user.username,
+          displayName: user.displayName,
+          camProfileId: user.camProfileId || null,
+          assignedClientCount: assigned.length,
+        },
+      });
+      await onRefreshState?.();
+      setStatus("connected");
+    } catch (err) {
+      window.alert(`Could not delete user: ${err.message}`);
       setStatus("error");
       setError(err.message);
     }
@@ -1855,7 +1924,16 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
                     </td>
                     <td>
                       {isEditing ? (
-                        <select value={patch.role ?? u.role} onChange={(e) => setEditUserPatch((p) => ({ ...p, role: e.target.value }))}>
+                        <select
+                          value={patch.role ?? u.role}
+                          onChange={(e) => setEditUserPatch((p) => ({
+                            ...p,
+                            role: e.target.value,
+                            hasCamProfile: e.target.value === USER_ROLES.CAM
+                              ? (p.hasCamProfile ?? Boolean(u.camProfileId))
+                              : false,
+                          }))}
+                        >
                           {Object.values(USER_ROLES).map((role) => <option key={role}>{role}</option>)}
                         </select>
                       ) : (
@@ -1864,12 +1942,20 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
                     </td>
                     <td>
                       {isEditing ? (
-                        <select value={patch.camProfileId ?? u.camProfileId ?? ""} onChange={(e) => setEditUserPatch((p) => ({ ...p, camProfileId: e.target.value }))}>
-                          <option value="">No CAM profile</option>
-                          {camProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-                        </select>
+                        (patch.role ?? u.role) === USER_ROLES.CAM ? (
+                          <label className="inline-toggle">
+                            <input
+                              type="checkbox"
+                              checked={patch.hasCamProfile ?? Boolean(u.camProfileId)}
+                              onChange={(e) => setEditUserPatch((p) => ({ ...p, hasCamProfile: e.target.checked }))}
+                            />
+                            <span>{(patch.hasCamProfile ?? Boolean(u.camProfileId)) ? "Yes" : "No"}</span>
+                          </label>
+                        ) : "—"
                       ) : (
-                        u.camProfileId ? camProfiles.find((profile) => profile.id === u.camProfileId)?.name || u.camProfileId : "—"
+                        u.role === USER_ROLES.CAM
+                          ? <span className={u.camProfileId ? "badge success" : "badge muted"}>{u.camProfileId ? "Yes" : "No"}</span>
+                          : "—"
                       )}
                     </td>
                     <td>
@@ -1896,7 +1982,8 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
                       ) : (
                         <>
                           <button className="ghost-button" title="Edit" onClick={() => { setEditUserId(u.id); setEditUserPatch({}); }}><Edit3 size={13} /></button>
-                          <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER || u.status === "Inactive"} title="Deactivate user" onClick={() => deactivateUser(u)}><Trash2 size={13} /></button>
+                          <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER || u.status === "Inactive"} title="Deactivate user" onClick={() => deactivateUser(u)}><EyeOff size={13} /></button>
+                          <button className="ghost-button" disabled={u.role === USER_ROLES.MANAGER} title="Delete user everywhere" onClick={() => deleteUser(u)}><Trash2 size={13} /></button>
                         </>
                       )}
                     </td>
@@ -1918,13 +2005,25 @@ function UsersAccessPanel({ users = [], onUsersChange, camProfiles = [] }) {
           <input required placeholder="Username *" value={newUser.username} onChange={(e) => setNewUser((v) => ({ ...v, username: e.target.value }))} />
           <input required type="email" placeholder="Email *" value={newUser.email} onChange={(e) => setNewUser((v) => ({ ...v, email: e.target.value }))} />
           <input required type="password" placeholder="Password *" value={newUser.password} autoComplete="new-password" onChange={(e) => setNewUser((v) => ({ ...v, password: e.target.value }))} />
-          <select value={newUser.role} onChange={(e) => setNewUser((v) => ({ ...v, role: e.target.value }))}>
+          <select
+            value={newUser.role}
+            onChange={(e) => setNewUser((v) => ({
+              ...v,
+              role: e.target.value,
+              hasCamProfile: e.target.value === USER_ROLES.CAM ? v.hasCamProfile : false,
+            }))}
+          >
             {Object.values(USER_ROLES).map((role) => <option key={role}>{role}</option>)}
           </select>
-          <select value={newUser.camProfileId} onChange={(e) => setNewUser((v) => ({ ...v, camProfileId: e.target.value }))}>
-            <option value="">No CAM profile</option>
-            {camProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-          </select>
+          <label className="inline-toggle">
+            <input
+              type="checkbox"
+              checked={newUser.role === USER_ROLES.CAM && Boolean(newUser.hasCamProfile)}
+              disabled={newUser.role !== USER_ROLES.CAM}
+              onChange={(e) => setNewUser((v) => ({ ...v, hasCamProfile: e.target.checked }))}
+            />
+            <span>CAM profile</span>
+          </label>
           <button className="secondary-button"><Plus size={14} /> Add user</button>
         </form>
       </section>
@@ -2918,6 +3017,7 @@ function ManagerOverview({
   onLogout,
   users = [],
   onUsersChange,
+  onRefreshState,
   session,
   onUpdateClientAccount,
   onTransferClient,
@@ -2945,13 +3045,17 @@ function ManagerOverview({
     () => buildTeamHistory(clients).slice(-10),
     [clients],
   );
+  const activeCamProfiles = useMemo(
+    () => activeCamProfilesForUsers(camProfiles, users),
+    [camProfiles, users],
+  );
   const cams = useMemo(
     () =>
-      camProfiles.map((profile) => {
+      activeCamProfiles.map((profile) => {
         const summary = buildManagerSummary(clientsForCam(clients, profile));
         return { ...profile, ...summary, flags: summary.openFlags };
       }),
-    [clients, camProfiles],
+    [clients, activeCamProfiles],
   );
   const totals = useMemo(
     () =>
@@ -2975,25 +3079,25 @@ function ManagerOverview({
   );
   const lifecycle = useMemo(() => buildLifecycleMetrics(clients), [clients]);
   const riskDist = useMemo(
-    () => buildRiskDistribution(clients, camProfiles),
-    [clients, camProfiles],
+    () => buildRiskDistribution(clients, activeCamProfiles),
+    [clients, activeCamProfiles],
   );
   const camPerf = useMemo(
-    () => buildCamPerformance(clients, camProfiles),
-    [clients, camProfiles],
+    () => buildCamPerformance(clients, activeCamProfiles),
+    [clients, activeCamProfiles],
   );
   const managerInsights = useMemo(
     () => buildPortfolioInsights(clients),
     [clients],
   );
   const allFunded = useMemo(
-    () => buildAllFundedAccounts(clients, camProfiles),
-    [clients, camProfiles],
+    () => buildAllFundedAccounts(clients, activeCamProfiles),
+    [clients, activeCamProfiles],
   );
   const allEvals = useMemo(() => {
     const rows = [];
     for (const client of clients) {
-      const cam = camProfiles.find((p) =>
+      const cam = activeCamProfiles.find((p) =>
         (p.clientIds || []).includes(client.id),
       );
       const reg = client.accountRegistry || {};
@@ -3027,7 +3131,14 @@ function ManagerOverview({
       }
     }
     return rows.sort((a, b) => b.weeklyPnl - a.weeklyPnl);
-  }, [clients, camProfiles]);
+  }, [clients, activeCamProfiles]);
+
+  const unassignedClients = useMemo(() => {
+    const assignedClientIds = new Set(
+      activeCamProfiles.flatMap((profile) => profile.clientIds || []),
+    );
+    return (clients || []).filter((client) => !assignedClientIds.has(client.id));
+  }, [clients, activeCamProfiles]);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const monthlyKpis = useMemo(() => {
@@ -3169,7 +3280,7 @@ function ManagerOverview({
             ? (() => {
                 const q = managerSearch.toLowerCase();
                 const results = clients.flatMap((c) => {
-                  const cam = camProfiles.find((p) =>
+                  const cam = activeCamProfiles.find((p) =>
                     (p.clientIds || []).includes(c.id),
                   );
                   const nameMatch = c.name?.toLowerCase().includes(q);
@@ -3246,7 +3357,13 @@ function ManagerOverview({
       </aside>
       <section className="content">
         {showUserPanel ? (
-          <UsersAccessPanel users={users} onUsersChange={onUsersChange} camProfiles={camProfiles} />
+          <UsersAccessPanel
+            users={users}
+            onUsersChange={onUsersChange}
+            camProfiles={camProfiles}
+            clients={clients}
+            onRefreshState={onRefreshState}
+          />
         ) : showAuditPanel ? (
           <AuditLogsPanel />
         ) : (
@@ -3313,7 +3430,7 @@ function ManagerOverview({
             <button
               className="ghost-button"
               onClick={() => {
-                const txt = buildTeamWeeklyReport(clients, camProfiles);
+                const txt = buildTeamWeeklyReport(clients, activeCamProfiles);
                 navigator.clipboard
                   .writeText(txt)
                   .then(() => alert("Weekly team summary copied!"));
@@ -3327,7 +3444,7 @@ function ManagerOverview({
               onClick={() => {
                 const report = buildTeamMessageReport(
                   clients,
-                  camProfiles,
+                  activeCamProfiles,
                   totals,
                   cams,
                 );
@@ -3350,6 +3467,17 @@ function ManagerOverview({
             </button>
           </div>
         </div>
+
+        {unassignedClients.length > 0 && (
+          <div className="notice danger">
+            <AlertTriangle size={16} />
+            <span>
+              <strong>{unassignedClients.length} client{unassignedClients.length !== 1 ? "s" : ""} unassigned</strong>
+              {" "}— no active CAM assigned. Reassign in the Client roster below:{" "}
+              {unassignedClients.map((client) => client.name).join(", ")}
+            </span>
+          </div>
+        )}
 
         <div className="metric-grid">
           <div className="metric">
@@ -3471,7 +3599,7 @@ function ManagerOverview({
                   }
                 >
                   <option value="">— Unassigned —</option>
-                  {camProfiles.map((p) => (
+                  {activeCamProfiles.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -3529,7 +3657,7 @@ function ManagerOverview({
         {showDataTools && (
           <DataToolsPanel
             clients={clients}
-            camProfiles={camProfiles}
+            camProfiles={activeCamProfiles}
             onImportClient={onImportClient}
             session={session}
           />
@@ -3548,7 +3676,7 @@ function ManagerOverview({
             STAGES.forEach((s) => (byStage[s] = []));
             for (const client of clients) {
               const stage = client.profile?.stage || "Active";
-              const cam = camProfiles.find((p) =>
+              const cam = activeCamProfiles.find((p) =>
                 (p.clientIds || []).includes(client.id),
               );
               const latest = client.dailyImports?.at(-1);
@@ -3985,7 +4113,7 @@ function ManagerOverview({
         <InsightFeedPanel
           insights={managerInsights}
           onSelectClient={(clientId) => {
-            const cam = camProfiles.find((p) =>
+            const cam = activeCamProfiles.find((p) =>
               (p.clientIds || []).includes(clientId),
             );
             onOpenCam(cam?.id, clientId);
@@ -4002,7 +4130,7 @@ function ManagerOverview({
                       f.status !== "Resolved" && f.status !== "Acknowledged",
                   )
                   .map((f) => {
-                    const cam = camProfiles.find((p) =>
+                    const cam = activeCamProfiles.find((p) =>
                       (p.clientIds || []).includes(c.id),
                     );
                     return {
@@ -4292,7 +4420,7 @@ function ManagerOverview({
                         }
                         style={{ cursor: "pointer" }}
                         onClick={() => {
-                          const cam = camProfiles.find((c) =>
+                          const cam = activeCamProfiles.find((c) =>
                             c.clientIds?.includes(row.clientId),
                           );
                           onOpenCam(cam?.id, row.clientId);
@@ -4300,7 +4428,7 @@ function ManagerOverview({
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            const cam = camProfiles.find((c) =>
+                            const cam = activeCamProfiles.find((c) =>
                               c.clientIds?.includes(row.clientId),
                             );
                             onOpenCam(cam?.id, row.clientId);
@@ -4454,7 +4582,7 @@ function ManagerOverview({
                       key={`${row.clientId}-${row.accountName}`}
                       style={{ cursor: "pointer" }}
                       onClick={() => {
-                        const cam = camProfiles.find((c) =>
+                        const cam = activeCamProfiles.find((c) =>
                           c.clientIds?.includes(row.clientId),
                         );
                         onOpenCam(cam?.id, row.clientId);
@@ -4857,7 +4985,7 @@ function ManagerOverview({
           (() => {
             const roster = clients
               .map((client) => {
-                const cam = camProfiles.find((p) =>
+                const cam = activeCamProfiles.find((p) =>
                   (p.clientIds || []).includes(client.id),
                 );
                 const latest = client.dailyImports?.at(-1);
@@ -4930,7 +5058,7 @@ function ManagerOverview({
                               onChange={(e) => {
                                 const newCamId = e.target.value;
                                 if (newCamId === (cam?.id || "")) return;
-                                const targetCam = camProfiles.find(
+                                const targetCam = activeCamProfiles.find(
                                   (p) => p.id === newCamId,
                                 );
                                 const label = targetCam
@@ -4948,7 +5076,7 @@ function ManagerOverview({
                               }}
                             >
                               <option value="">— Unassigned —</option>
-                              {camProfiles.map((p) => (
+                              {activeCamProfiles.map((p) => (
                                 <option key={p.id} value={p.id}>
                                   {p.name}
                                 </option>
@@ -10491,10 +10619,15 @@ export default function App() {
     };
   }, []);
 
+  const visibleCamProfiles = activeCamProfilesForUsers(state.camProfiles || [], users);
   const currentCamProfile =
+    visibleCamProfiles.find(
+      (profile) => profile.id === state.accountManager?.id,
+    ) ||
     (state.camProfiles || []).find(
       (profile) => profile.id === state.accountManager?.id,
     ) ||
+    visibleCamProfiles[0] ||
     state.camProfiles?.[0] ||
     null;
   const currentCamClients = clientsForCam(state.clients, currentCamProfile);
@@ -11253,6 +11386,7 @@ export default function App() {
           onLogout={handleLogout}
           users={users}
           onUsersChange={setUsers}
+          onRefreshState={() => reloadSupabaseState(null)}
           session={session}
           onUpdateClientAccount={persistAccountUpdate}
           onTransferClient={(clientId, toCamId) => {
@@ -11511,7 +11645,7 @@ export default function App() {
               {isManagerSession ? (
                 <>
                   <div className="nav-label">Other CAMs</div>
-                  {(state.camProfiles || [])
+                  {visibleCamProfiles
                     .filter(
                       (profile) => profile.id !== state.accountManager?.id,
                     )
@@ -11829,7 +11963,7 @@ export default function App() {
             <>
               <CamOverview
                 clients={currentCamClients}
-                camProfiles={state.camProfiles || []}
+                camProfiles={visibleCamProfiles}
                 allClients={accessibleClients}
                 strategySetRecords={strategySetIndex.records}
                 strategySetIndexStatus={strategySetIndex.status}
@@ -12670,7 +12804,7 @@ export default function App() {
                           const r = results[globalSearchIdx];
                           setGlobalSearchOpen(false);
                           const ownerCam = isManagerSession
-                            ? (state.camProfiles || []).find((p) =>
+                            ? visibleCamProfiles.find((p) =>
                                 (p.clientIds || []).includes(r.client.id),
                               )
                             : currentCamProfile;
@@ -12709,7 +12843,7 @@ export default function App() {
                         onClick={() => {
                           setGlobalSearchOpen(false);
                           const ownerCam = isManagerSession
-                            ? (state.camProfiles || []).find((p) =>
+                            ? visibleCamProfiles.find((p) =>
                                 (p.clientIds || []).includes(r.client.id),
                               )
                             : currentCamProfile;
