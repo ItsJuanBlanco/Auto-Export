@@ -2465,6 +2465,26 @@ tr:nth-child(2) .rank-badge {
   flex: 1 1 120px;
 }
 
+.inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.inline-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
 /* Registry table — wider cols for dates */
 .registry-table th,
 .registry-table td {

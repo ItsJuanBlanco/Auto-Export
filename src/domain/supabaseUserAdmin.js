@@ -47,6 +47,11 @@ export async function updateSupabaseManagedUser(user) {
 }
 
 export async function deactivateSupabaseManagedUser(appUserId) {
+  const { users } = await requestUsers('PATCH', { appUserId, status: 'Inactive' });
+  return users || [];
+}
+
+export async function deleteSupabaseManagedUser(appUserId) {
   const { users } = await requestUsers('DELETE', { appUserId });
   return users || [];
 }

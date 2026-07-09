@@ -22,6 +22,10 @@ function legacyUserKey(username) {
   return `user-${normalizeUsername(username).replace(/[^a-z0-9_-]/g, '-')}`;
 }
 
+function legacyCamKey(username) {
+  return `am-${normalizeUsername(username).replace(/[^a-z0-9_-]/g, '-')}`;
+}
+
 function mapUser(row) {
   return {
     id: row.legacy_key || row.id,
@@ -33,6 +37,8 @@ function mapUser(row) {
     displayName: row.display_name || row.username || '',
     email: row.email || '',
     camProfileId: row.cam_profiles?.legacy_key || null,
+    hasCamProfile: Boolean(row.cam_profile_id),
+    lastActiveAt: row.last_active_at || '',
   };
 }
 
@@ -142,6 +148,46 @@ async function getCamProfileId(admin, camProfileId) {
   return data.id;
 }
 
+async function createCamProfileForUser(admin, { username, displayName, status = 'Active' }) {
+  const { data, error } = await admin
+    .from('cam_profiles')
+    .upsert({
+      legacy_key: legacyCamKey(username),
+      name: displayName,
+      role_title: 'CAM',
+      status,
+      live: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'legacy_key' })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
+async function updateLinkedCamProfile(admin, camProfileId, { name, status }) {
+  if (!camProfileId) return;
+  const { error } = await admin
+    .from('cam_profiles')
+    .update({
+      name,
+      status,
+      live: status !== 'Inactive',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', camProfileId);
+  if (error) throw error;
+}
+
+async function deleteCamProfile(admin, camProfileId) {
+  if (!camProfileId) return;
+  const { error } = await admin
+    .from('cam_profiles')
+    .delete()
+    .eq('id', camProfileId);
+  if (error) throw error;
+}
+
 async function listUsers(admin) {
   const { data, error } = await admin
     .from('app_users')
@@ -185,7 +231,12 @@ async function createUser(admin, payload) {
   });
   if (authError) throw authError;
 
-  const camUuid = await getCamProfileId(admin, payload.camProfileId);
+  const wantsCamProfile = role === 'CAM' && Boolean(payload.hasCamProfile || payload.camProfileId);
+  const camUuid = payload.camProfileId
+    ? await getCamProfileId(admin, payload.camProfileId)
+    : wantsCamProfile
+      ? await createCamProfileForUser(admin, { username, displayName, status: 'Active' })
+      : null;
   const { data, error } = await admin
     .from('app_users')
     .upsert({
@@ -222,12 +273,29 @@ async function updateUser(admin, payload) {
   const displayName = payload.displayName != null ? String(payload.displayName || '').trim() : existing.display_name;
   const role = payload.role === 'Manager' ? 'Manager' : payload.role === 'CAM' ? 'CAM' : existing.role;
   const status = payload.status === 'Inactive' ? 'Inactive' : 'Active';
-  const camUuid = 'camProfileId' in payload
-    ? await getCamProfileId(admin, payload.camProfileId)
-    : existing.cam_profile_id;
+  const wantsCamProfile = role === 'CAM' && (
+    'hasCamProfile' in payload
+      ? Boolean(payload.hasCamProfile)
+      : 'camProfileId' in payload
+        ? Boolean(payload.camProfileId)
+        : Boolean(existing.cam_profile_id)
+  );
+  let camUuid = existing.cam_profile_id;
 
   if (!username || !email || !displayName) {
     throw Object.assign(new Error('Display name, username, and email are required.'), { status: 400 });
+  }
+
+  if (role !== 'CAM' || !wantsCamProfile) {
+    await deleteCamProfile(admin, existing.cam_profile_id);
+    camUuid = null;
+  } else if (payload.camProfileId && payload.camProfileId !== existing.cam_profile_id) {
+    camUuid = await getCamProfileId(admin, payload.camProfileId);
+    await updateLinkedCamProfile(admin, camUuid, { name: displayName, status });
+  } else if (!existing.cam_profile_id) {
+    camUuid = await createCamProfileForUser(admin, { username, displayName, status });
+  } else {
+    await updateLinkedCamProfile(admin, existing.cam_profile_id, { name: displayName, status });
   }
 
   if (existing.auth_user_id) {
@@ -260,8 +328,34 @@ async function updateUser(admin, payload) {
   return mapUser(data);
 }
 
-async function deactivateUser(admin, payload) {
-  return updateUser(admin, { appUserId: payload.appUserId, status: 'Inactive' });
+async function deleteUser(admin, payload) {
+  const appUserId = payload.appUserId;
+  if (!appUserId) throw Object.assign(new Error('appUserId is required.'), { status: 400 });
+
+  const { data: existing, error: existingError } = await admin
+    .from('app_users')
+    .select('*')
+    .eq('id', appUserId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (!existing) throw Object.assign(new Error('User not found.'), { status: 404 });
+  if (existing.role === 'Manager') {
+    throw Object.assign(new Error('Manager users cannot be deleted from this panel.'), { status: 400 });
+  }
+
+  if (existing.auth_user_id) {
+    const { error: authError } = await admin.auth.admin.deleteUser(existing.auth_user_id);
+    if (authError) throw authError;
+  }
+
+  const { error: appUserError } = await admin
+    .from('app_users')
+    .delete()
+    .eq('id', appUserId);
+  if (appUserError) throw appUserError;
+
+  await deleteCamProfile(admin, existing.cam_profile_id);
+  return mapUser(existing);
 }
 
 export default async function handler(req, res) {
@@ -283,7 +377,7 @@ export default async function handler(req, res) {
       return send(res, 200, { user, users: await listUsers(admin) });
     }
     if (req.method === 'DELETE') {
-      const user = await deactivateUser(admin, payload);
+      const user = await deleteUser(admin, payload);
       return send(res, 200, { user, users: await listUsers(admin) });
     }
 
