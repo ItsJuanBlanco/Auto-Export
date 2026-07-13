@@ -1,120 +1,49 @@
-# CAM CRM
+# PR: Endpoint de importación automática desde NinjaTrader (watcher)
 
-Web CRM for managing trading client accounts from NinjaTrader end-of-day exports with Supabase-backed persistence.
+## Qué agrega esto
 
-The goal is to replace a manual Excel workflow with a safer daily close process: upload the client's NinjaTrader CSV files, persist account classifications, review action flags, inspect account/strategy performance, and build a clean daily report.
+- **`api/import/daily.js`** — recibe el lote diario (accounts/strategies/orders/
+  executions) que exporta NinjaTrader vía un AddOn + un watcher en Python que
+  corre en cada VPS de cliente, y lo escribe en Supabase siguiendo exactamente el
+  mismo flujo que ya está documentado en `supabase/step_9_daily_import_persistence.md`.
 
-## What It Does
+## Identificación y seguridad (integrado con `src/domain/ingestAuth.js`)
 
-- Tracks one account manager workspace with multiple clients.
-- Imports NinjaTrader CSV exports by column headers, not fixed column positions.
-- Supports Accounts, Strategies, Orders, and Executions exports.
-- Ignores simulator accounts whose names start with `SIM`.
-- Persists manual account classification across days.
-- Separates Review, Evaluations, Funded, Cash, Credentials, Notes, and Price Checks.
-- Shows account-level and strategy-level drill-downs.
-- Joins executions to strategies through `order.id -> execution.orderId`.
-- Shows CAM Overview across clients: algorithms running, accounts, deviations, daily PnL, account weekly context, and per-client breakdown.
-- Optionally matches running strategies against local NinjaTrader XML set files to display risk, version, period, pass type, direction, and strategy movement.
-- Builds a printable daily report that can be saved as PDF.
+Este endpoint usa el resolver `resolveClientForIngest` (ya committeado por Pedro)
+para identificar al cliente y hacer el "device binding":
 
-## AI Agent Quickstart
+```js
+const { clientId } = await resolveClientForIngest(admin, {
+  productKey: req.headers['x-product-key'],
+  machineId: req.headers['x-machine-id'],
+});
+```
 
-If you are an AI coding agent opening this repository, run these commands from the repository root:
+- El watcher manda `x-product-key` (el product_key del cliente) y `x-machine-id`
+  (MachineGuid de Windows de ese VPS, estable entre reinicios).
+- El primer upload registra la máquina contra el product_key; los siguientes se
+  validan contra ese registro (tabla `ingest_devices`, migración
+  `supabase/step_22_ingest_devices.sql`, la corre Natanel).
+- Errores devueltos por el resolver: 401 (product_key inválido), 403 (máquina
+  distinta a la registrada), 400 (falta algún header).
+
+No hace falta ninguna API key compartida ni variable de entorno nueva en Vercel —
+la Service Role Key sigue siendo la misma que ya usan `api/admin/*.js`.
+
+## Cómo probarlo
 
 ```bash
-npm install
-npm run dev:open
+curl -X POST https://cam-crm-vincere.vercel.app/api/import/daily \
+  -H "x-product-key: EL_PRODUCT_KEY_DE_UN_CLIENTE_REAL" \
+  -H "x-machine-id: test-machine-001" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accounts": [{"AccountName": "Sim101", "RealizedPnL": "100", "UnrealizedPnL": "0", "NetLiquidation": "50100"}],
+    "strategies": [],
+    "orders": [],
+    "executions": []
+  }'
 ```
 
-Expected behavior:
-
-1. Vite starts on `http://127.0.0.1:5173/`.
-2. The default browser opens the local app automatically.
-3. The app shows the CAM CRM sidebar and workspace.
-4. If no client data is loaded, create a client and upload that client's NinjaTrader CSV files.
-
-For verification, run:
-
-```bash
-npm test
-npm run build
-npm run lint
-```
-
-## Local XML Strategy Index
-
-Strategy XML set files are private and are intentionally not committed.
-
-If the local folder exists at:
-
-```text
-Vincere Trading 6.0/3 - Set Files
-```
-
-generate the local strategy index with:
-
-```bash
-npm run xml:index
-```
-
-This writes:
-
-```text
-public/strategy-set-index.json
-```
-
-That generated JSON is also gitignored. The app will use it locally to match strategies by signature and show XML-derived labels such as risk, period, set version, Bullet Bot pass type, direction, size, and target.
-
-## Daily Workflow
-
-1. Run `npm run dev:open`.
-2. Add a client from the sidebar.
-3. Select the client.
-4. Choose the close date.
-5. Upload the four NinjaTrader exports for that client:
-   - Accounts
-   - Strategies
-   - Orders
-   - Executions
-6. Classify new accounts once in the Account Registry.
-7. Click `Recalculate` in Action Required after classification changes.
-8. Review Evaluations, Funded, Cash, and Review tabs.
-9. Expand an account to inspect strategies, attributed executions, and movement.
-10. Open CAM Overview to compare algorithms across clients.
-11. Click `Build Daily Report`, then print or save as PDF.
-
-## Important Data Rules
-
-- Upload only one client's NinjaTrader files at a time.
-- CSV file type is detected by headers, so file names and column order can vary.
-- Positions are not required for the daily close because positions can disappear by end of day.
-- Executions and Orders are used for trade reconstruction.
-- Cash accounts only focus on daily/gross PnL, weekly PnL, and account balance.
-- Bullet Bot is treated as an Evaluation subtype.
-- Account classification is manual the first time and persisted afterward.
-
-## Sensitive Files
-
-These are ignored by git and should stay local:
-
-- Excel workbooks
-- NinjaTrader CSV exports
-- NinjaTrader strategy/set XML files
-- Generated `public/strategy-set-index.json`
-- Local `.env` / `.env.local` files
-
-## Scripts
-
-```bash
-npm run dev        # Start Vite locally
-npm run dev:open   # Start Vite and open localhost automatically
-npm run xml:index  # Generate local XML strategy index if set files exist
-npm test           # Run Vitest suite
-npm run build      # Production build check
-npm run lint       # ESLint check
-```
-
-## Project Status
-
-The active application uses Supabase for authentication and operational persistence. Browser storage is limited to non-critical UI/session state; client, CAM, account, import, task, flag, user, and SOP data should be stored in Supabase.
+Primer request con esa combinación product_key + machine-id → 200 y registra la
+máquina. Un segundo request con el mismo product_key pero otro machine-id → 403.
